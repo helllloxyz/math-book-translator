@@ -1,0 +1,43 @@
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { dirname, resolve } from 'node:path'
+
+const currentDir = dirname(fileURLToPath(import.meta.url))
+const source = readFileSync(resolve(currentDir, 'Reader.vue'), 'utf8')
+
+assert.match(source, /fetchNextQuizQuestion/, 'Reader Quiz should call the structured quiz next endpoint')
+assert.match(source, /createQuizQuestionCard/, 'Reader Quiz should create a structured quiz card')
+assert.match(source, /questionType:\s*String\(route\.query\.question_type/, 'Reader should use Book Quiz selected question type')
+assert.match(source, /buildReaderItemQuery/, 'Reader should write selected reader identity into the URL query')
+assert.match(source, /findReaderLeafByRouteQuery/, 'Reader should resolve initial content from explicit reader URL params')
+assert.match(source, /router\.replace/, 'Reader should keep chapter and guide selection reflected in the current GET URL')
+assert.match(source, /bookQuizTarget:\$\{book\.value\.id\}/, 'Reader should read the Book Quiz personalization payload')
+assert.match(source, /Target concept: \$\{parsed\.target_concept\}/, 'Reader should pass the selected Book Quiz target concept into personalization context')
+assert.match(source, /Reason: \$\{parsed\.reason\}/, 'Reader should pass the Book Quiz selection reason into personalization context')
+assert.match(source, /openLatexRepairDialog/, 'Reader should open a LaTeX repair dialog from selected text')
+assert.match(source, /retryLatexRepair/, 'Reader should let users retry failed LaTeX repair candidates')
+assert.match(source, /confirmLatexRepair/, 'Reader should apply the confirmed LaTeX repair candidate')
+assert.match(source, /latexRepair\.value\.failedCandidates/, 'Reader should send failed repair candidates back for retry context')
+assert.match(source, /findChapterGuideLeaf/, 'Reader should resolve the guide matching the current chapter')
+assert.match(source, /guide-dual/, 'Reader should support a chapter-plus-guide dual pane mode')
+assert.match(source, /renderedGuide/, 'Reader should render matched chapter guide content separately from chapter content')
+assert.match(source, /guide\.type === 'learning'/, 'Guide dual pane should load chapter learning when it is the fallback leaf')
+assert.match(source, /readerType:\s*guide\.type === 'learning'\s*\?\s*'learning'\s*:\s*'guide'/, 'Guide dual pane should use the right reader endpoint for guide or learning fallback content')
+assert.match(source, /setViewMode/, 'Reader should use explicit view mode selection instead of cycling pane modes')
+assert.match(source, /canUseChapterContent/, 'Reader should allow guide dual whenever the selected item carries a chapter id')
+assert.match(source, /loadItemFromRouteQuery/, 'Reader should load content from reader URL query after initial mount')
+assert.match(source, /route\.query\.chapter_id/, 'Reader should react when the chapter_id query changes on the same reader route')
+
+const panesSource = readFileSync(resolve(currentDir, '../components/ReaderPanes.vue'), 'utf8')
+assert.match(panesSource, /No chapter guide is available for this chapter yet\./, 'Guide dual pane should keep the missing-guide empty state')
+assert.match(panesSource, /props\.viewMode === 'guide-dual'\) return 'guide-dual'/, 'Guide dual pane should not fall back to single just because source HTML is empty')
+assert.match(panesSource, /guideUnavailable/, 'Guide dual pane should show the empty state when the right pane has no rendered guide HTML')
+assert.match(panesSource, /leftPaneHtml/, 'Guide dual pane should be able to use a different left pane source than translation dual')
+
+const contentSource = readFileSync(resolve(currentDir, '../composables/useReaderContent.js'), 'utf8')
+assert.match(contentSource, /data\.content_translated === 'string' && data\.content_translated\.trim\(\)/, 'Reader content should fall back to raw chapter content when translated content is blank')
+assert.match(contentSource, /Failed to load guide chapter context/, 'Guide content should load same-chapter context without blocking guide display')
+assert.match(contentSource, /Failed to load learning chapter context/, 'Learning content should load same-chapter context for guide dual display')
+
+console.log('Reader structured quiz wiring ok')

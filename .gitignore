@@ -1,0 +1,15 @@
+
+__pycache__/
+*.log
+*.env
+*.db
+nohup.out
+storage/*
+backend/storage/*
+backend/config/llm_credentials.json
+project_spec.md
+.superpowers/
+.worktrees/
+.venv
+.agents
+skills-lock.json

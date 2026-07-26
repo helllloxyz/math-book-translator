@@ -1,0 +1,34 @@
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { dirname, resolve } from 'node:path'
+
+const currentDir = dirname(fileURLToPath(import.meta.url))
+const source = readFileSync(resolve(currentDir, 'bookStore.js'), 'utf8')
+
+assert.match(source, /async uploadBook\(file,\s*options\s*=\s*\{\}\)/, 'uploadBook should accept force/preflight options')
+assert.match(source, /formData\.append\('force', String\(Boolean\(options\.force\)\)\)/, 'uploadBook should send force as form data')
+assert.match(source, /async importBook\(filePath,\s*options\s*=\s*\{\}\)/, 'importBook should accept force/preflight options')
+assert.match(source, /force:\s*Boolean\(options\.force\)/, 'importBook should send force in the JSON body')
+assert.match(source, /return response\.data/, 'import actions should return preflight responses to callers')
+assert.match(source, /async importBookPackage\(file\)/, 'book store should import portable book packages')
+assert.match(source, /apiClient\.post\('\/books\/import-package'/, 'book package import should use the package endpoint')
+assert.match(source, /async exportBookPackage\(bookId,\s*filename\)/, 'book store should export portable book packages')
+assert.match(source, /apiClient\.get\(`\/books\/\$\{bookId\}\/export`/, 'book package export should use the export endpoint')
+assert.match(source, /responseType:\s*'blob'/, 'book package export should request a blob download')
+assert.match(source, /fetchNextQuizQuestion/, 'book store should fetch structured chapter quiz questions')
+assert.match(source, /submitQuizAttempt/, 'book store should submit structured quiz attempts')
+assert.match(source, /selectBookQuizTarget/, 'book store should select a Book Quiz target')
+assert.match(source, /async fetchReaderContent\(bookId,\s*options\s*=\s*\{\}\)/, 'book store should fetch reader content with explicit GET params')
+assert.match(source, /`\/books\/\$\{bookId\}\/reader-content`/, 'reader content should use the distinguishable reader content endpoint')
+assert.match(source, /reader_type:\s*options\.readerType/, 'reader content should include reader_type in GET params')
+assert.match(source, /guide_id:\s*options\.guideId/, 'reader content should include guide_id in GET params')
+assert.doesNotMatch(source, /guide_filename:\s*options\.guideFilename/, 'reader content should not send guide_filename')
+assert.doesNotMatch(source, /source_type:\s*options\.sourceType/, 'reader content should not send source_type when reader identity is enough')
+assert.doesNotMatch(source, /source_id:\s*options\.sourceId/, 'reader content should not send source_id when reader identity is enough')
+assert.match(source, /suggestChapterLatexRepair/, 'book store should request LLM LaTeX repair candidates')
+assert.match(source, /applyChapterLatexRepair/, 'book store should apply confirmed LaTeX repair replacements')
+assert.match(source, /\/chapters\/\$\{chapterId\}\/latex-repair\/suggest/, 'LaTeX repair suggestions should use the chapter suggest endpoint')
+assert.match(source, /\/chapters\/\$\{chapterId\}\/latex-repair\/apply/, 'LaTeX repair application should use the chapter apply endpoint')
+
+console.log('bookStore import preflight wiring ok')

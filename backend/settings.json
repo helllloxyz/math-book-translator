@@ -1,0 +1,11 @@
+{
+  "storage_path": "storage",
+  "llm_profiles": {
+    "default": {
+      "provider_id": "gemini",
+      "provider_type": "gemini",
+      "credential_id": "gemini",
+      "model": "gemini-3-flash-preview"
+    }
+  }
+}

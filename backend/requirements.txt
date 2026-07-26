@@ -1,0 +1,15 @@
+fastapi
+uvicorn
+sqlalchemy
+alembic
+aiosqlite
+python-multipart
+aiofiles
+pytest
+pytest-asyncio
+httpx[socks]
+openai
+anthropic
+python-dotenv
+greenlet
+google-genai
