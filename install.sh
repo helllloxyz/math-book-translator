@@ -36,9 +36,11 @@ fi
 
 # Install backend dependencies
 echo "Installing backend dependencies..."
+VENV_PATH=${VENV_PATH:-"$HOME/agent"}
+echo "Creating virtual environment at $VENV_PATH..."
+$PYTHON_BIN -m venv "$VENV_PATH"
+source "$VENV_PATH/bin/activate"
 cd backend
-$PYTHON_BIN -m venv .venv
-source .venv/bin/activate
 pip install -r requirements.txt
 deactivate
 cd ..

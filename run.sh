@@ -4,7 +4,8 @@ echo "Starting Math Book Translator..."
 # Start backend
 echo "Starting backend server..."
 cd backend
-source .venv/bin/activate
+VENV_PATH=${VENV_PATH:-"$HOME/agent"}
+source "$VENV_PATH/bin/activate"
 
 RUN_DB_MIGRATIONS=${RUN_DB_MIGRATIONS:-1}
 if [ "$RUN_DB_MIGRATIONS" = "1" ]; then
