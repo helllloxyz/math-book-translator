@@ -13,3 +13,4 @@ project_spec.md
 .venv
 .agents
 skills-lock.json
+.DS_Store

@@ -56,12 +56,12 @@ class TranslatorService:
             from google import genai
 
             self.gemini_client = genai.Client(api_key=self.api_key)
-            self.model_name = self.model_name or "gemini-1.5-flash"
+            self.model_name = self.model_name or "gemini-2.5-flash"
         elif self.client_type == "anthropic":
             import anthropic
 
             self.anthropic_client = anthropic.AsyncAnthropic(api_key=self.api_key)
-            self.model_name = self.model_name or "claude-3-5-sonnet-20240620"
+            self.model_name = self.model_name or "claude-sonnet-4-6"
         else: # openai compatible
             import openai
 
@@ -79,7 +79,7 @@ class TranslatorService:
                 default_headers=self.default_headers or None,
             )
             if not self.model_name:
-                self.model_name = "gpt-3.5-turbo"
+                self.model_name = "gpt-5.6-terra"
 
     @staticmethod
     def configuration_error(task: str = "default") -> str | None:
