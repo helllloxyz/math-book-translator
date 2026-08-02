@@ -1,52 +1,259 @@
 :root {
-  --primary-color: #2c3e50;
-  --accent-color: #3498db;
-  --bg-color: #f8f9fa;
-  --sidebar-bg: #ffffff;
-  --border-color: #e0e0e0;
-  --text-color: #333333;
-  --header-height: 60px;
-  --sidebar-width: 260px;
+  color-scheme: light;
+
+  --color-canvas: #f5f1e8;
+  --color-canvas-deep: #ece5d8;
+  --color-surface: #fffdf8;
+  --color-surface-raised: #ffffff;
+  --color-surface-muted: #f1ece2;
+  --color-ink: #1c1b18;
+  --color-ink-soft: #4d4942;
+  --color-muted: #777168;
+  --color-faint: #9b948a;
+  --color-line: #ddd5c7;
+  --color-line-strong: #c9bead;
+  --color-accent: #c56547;
+  --color-accent-dark: #9d4833;
+  --color-accent-soft: #f4ded4;
+  --color-success: #647c56;
+  --color-success-soft: #e5eddf;
+  --color-warning: #aa7b35;
+  --color-warning-soft: #f6ead1;
+  --color-danger: #a84c45;
+  --color-danger-soft: #f5dfdc;
+  --color-info: #607d91;
+  --color-info-soft: #e4edf2;
+
+  --font-ui: "Avenir Next", Avenir, "Segoe UI Variable", "PingFang SC", "Hiragino Sans GB", sans-serif;
+  --font-display: "Iowan Old Style", Baskerville, "Source Han Serif SC", "Songti SC", STSong, serif;
+  --font-reading: "Source Han Serif SC", "Noto Serif CJK SC", "Songti SC", STSong, Georgia, serif;
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+
+  --text-xs: 0.72rem;
+  --text-sm: 0.82rem;
+  --text-base: 0.94rem;
+  --text-lg: 1.08rem;
+  --text-xl: 1.35rem;
+  --text-2xl: 1.8rem;
+  --text-display: clamp(2.35rem, 4.5vw, 4.6rem);
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+
+  --radius-xs: 4px;
+  --radius-sm: 7px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-xl: 26px;
+
+  --shadow-sm: 0 1px 2px rgba(68, 52, 34, 0.06);
+  --shadow-md: 0 12px 32px rgba(68, 52, 34, 0.09);
+  --shadow-lg: 0 26px 72px rgba(50, 38, 25, 0.16);
+
+  --primary-color: var(--color-ink);
+  --accent-color: var(--color-accent);
+  --bg-color: var(--color-canvas);
+  --sidebar-bg: var(--color-surface);
+  --border-color: var(--color-line);
+  --text-color: var(--color-ink);
+  --header-height: 58px;
+  --sidebar-width: 280px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  background: var(--color-canvas);
 }
 
 body {
   margin: 0;
   padding: 0;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  background-color: var(--bg-color);
-  color: var(--text-color);
+  font-family: var(--font-ui);
+  background:
+    radial-gradient(circle at 12% -8%, rgba(197, 101, 71, 0.09), transparent 27rem),
+    radial-gradient(circle at 94% 9%, rgba(100, 124, 86, 0.06), transparent 24rem),
+    var(--color-canvas);
+  color: var(--color-ink);
   line-height: 1.6;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button,
+a,
+select,
+input,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+a:focus-visible,
+select:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+
+button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+::selection {
+  color: var(--color-ink);
+  background: var(--color-accent-soft);
 }
 
 #app {
   display: flex;
-  min-height: 100vh;
+  min-height: 100dvh;
 }
 
-/* Scrollbar styling */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
 }
+
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
-  background: #ccc;
-  border-radius: 4px;
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: rgba(95, 83, 68, 0.34);
+  background-clip: padding-box;
 }
+
 ::-webkit-scrollbar-thumb:hover {
-  background: #bbb;
+  background: rgba(95, 83, 68, 0.52);
+  background-clip: padding-box;
 }
 
-/* LaTeX CSS Overrides for readability */
 .latex-content {
-  font-size: 1.1rem;
-  max-width: 900px;
+  max-width: 46rem;
   margin: 0 auto;
+  color: var(--color-ink-soft);
+  font-family: var(--font-reading);
+  font-size: 1.08rem;
+  line-height: 1.88;
+  letter-spacing: 0.008em;
+  text-wrap: pretty;
 }
 
-.latex-content h1, .latex-content h2, .latex-content h3 {
-  margin-top: 2rem;
-  color: var(--primary-color);
+.latex-content h1,
+.latex-content h2,
+.latex-content h3,
+.latex-content h4 {
+  color: var(--color-ink);
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  text-wrap: balance;
+}
+
+.latex-content h1 {
+  margin: 0 0 2.25rem;
+  font-size: clamp(2rem, 4vw, 3rem);
+  line-height: 1.12;
+}
+
+.latex-content h2 {
+  margin: 3.5rem 0 1.1rem;
+  font-size: clamp(1.55rem, 2.5vw, 2.05rem);
+  line-height: 1.25;
+}
+
+.latex-content h3 {
+  margin: 2.6rem 0 0.85rem;
+  font-size: 1.3rem;
+  line-height: 1.35;
+}
+
+.latex-content p,
+.latex-content ul,
+.latex-content ol {
+  margin-top: 0;
+  margin-bottom: 1.25em;
+}
+
+.latex-content blockquote {
+  margin: 1.8rem 0;
+  padding: 0.15rem 0 0.15rem 1.4rem;
+  border-left: 2px solid var(--color-accent);
+  color: var(--color-muted);
+  font-style: italic;
+}
+
+.latex-content pre,
+.latex-content code {
+  font-family: var(--font-mono);
+}
+
+.latex-content pre {
+  overflow: auto;
+  padding: 1.1rem 1.25rem;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-sm);
+  background: #292720;
+  color: #f6f1e7;
+}
+
+.latex-content :not(pre) > code {
+  padding: 0.12em 0.32em;
+  border-radius: var(--radius-xs);
+  background: var(--color-surface-muted);
+  color: var(--color-accent-dark);
+  font-size: 0.88em;
+}
+
+.latex-content img,
+.latex-content svg {
+  max-width: 100%;
+}
+
+.latex-content .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  margin: 1.75rem 0;
+  padding: 0.35rem 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (max-width: 720px) {
+  .latex-content {
+    font-size: 1rem;
+    line-height: 1.82;
+  }
 }
