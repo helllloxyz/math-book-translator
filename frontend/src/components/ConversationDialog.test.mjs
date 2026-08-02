@@ -13,8 +13,11 @@ assert.match(
 )
 
 assert.match(component, /class="dialog-status-dot"/, 'dialog header should include a compact status dot')
-assert.match(component, /class="standalone-context-summary"/, 'standalone conversations should surface source metadata in the main page header')
+assert.match(component, /class="standalone-details"/, 'standalone conversations should keep secondary status information collapsible')
+assert.match(component, /class="standalone-details-grid"/, 'expanded standalone details should expose source metadata and model status')
+assert.doesNotMatch(component, /class="standalone-context-summary"/, 'standalone headers should not spread metadata across the full header row')
 assert.match(component, /class="standalone-actions"/, 'standalone conversations should keep source and delete actions in the top bar')
+assert.match(component, /class="standalone-actions"[\s\S]*?class="standalone-details"[\s\S]*?class="delete-conversation-button"/, 'standalone details should sit beside the source action instead of taking a separate header row')
 assert.match(component, /v-if="!standalone"/, 'the fixed source sidebar should be reserved for embedded dialog mode')
 assert.match(component, /class="dialog-panel"/, 'conversation header and content should live in the main dialog panel')
 assert.match(component, /class="dialog-content"/, 'dialog should keep messages and composer in a single content column')

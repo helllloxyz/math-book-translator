@@ -5,41 +5,130 @@
         <img class="home-logo" src="/logo.png" alt="Math Book Translator logo" />
         <div>
           <h1>Interactive Library</h1>
-          <p>Translate and manage your math textbooks</p>
+          <p>翻译、阅读并管理你的数学书</p>
         </div>
       </div>
 
-      <div class="header-actions">
-        <button class="icon-btn response-styles-btn" @click="showResponseStyles = true" title="Response Styles">
-          <span class="icon">📝</span>
-          Response Styles
-        </button>
-        <button class="icon-btn settings-btn" @click="showSettings = true" title="Settings">
-          <span class="icon">⚙️</span>
-          Settings
-        </button>
-        <button class="icon-btn ai-author-btn" @click="handleStartAgent" title="AI Author">
-          <span class="icon">🤖</span>
-          AI Author
-        </button>
+      <div class="header-actions" @click.stop>
+        <div class="action-menu-wrap header-tools-wrap">
+          <button
+            class="icon-btn tools-menu-btn"
+            type="button"
+            title="Library tools"
+            :aria-expanded="headerToolsOpen"
+            aria-haspopup="menu"
+            @click="toggleHeaderTools"
+          >
+            工具与设置
+            <span class="menu-chevron" aria-hidden="true">⌄</span>
+          </button>
+          <div v-if="headerToolsOpen" class="action-menu header-tools-menu" role="menu">
+            <button class="menu-item response-styles-btn" role="menuitem" @click="showResponseStyles = true; closeMenus()" title="Response Styles">
+              Response Styles
+            </button>
+            <button class="menu-item settings-btn" role="menuitem" @click="showSettings = true; closeMenus()" title="Settings">
+              设置
+            </button>
+            <button class="menu-item ai-author-btn" role="menuitem" @click="handleStartAgent(); closeMenus()" title="AI Author">
+              AI Author
+            </button>
+          </div>
+        </div>
         <button class="primary-btn add-book-btn" @click="showImport = true">
-          <span class="icon">➕</span>
-          Add Book
+          添加图书
         </button>
       </div>
     </header>
 
-    <div v-if="loading" class="loading-state">Loading books...</div>
-    <div v-else-if="error" class="error-state">{{ error }}</div>
+    <div v-if="loading" class="book-grid library-skeleton" aria-label="正在加载图书">
+      <div v-for="index in 3" :key="index" class="book-card skeleton-card" aria-hidden="true">
+        <div class="skeleton-line skeleton-title"></div>
+        <div class="skeleton-line skeleton-meta"></div>
+        <div class="skeleton-line skeleton-action"></div>
+      </div>
+    </div>
+    <section v-else-if="error" class="error-state library-feedback-state">
+      <p>{{ error }}</p>
+      <button type="button" class="secondary-btn" @click="bookStore.fetchBooks()">重新加载</button>
+    </section>
+    <section v-else-if="books.length === 0" class="library-empty-state">
+      <span class="empty-index" aria-hidden="true">∅</span>
+      <p class="empty-kicker">你的数学书房还没有内容</p>
+      <h2>从一本 Markdown 数学书开始</h2>
+      <p>导入后可以分章节阅读、翻译、提问、做笔记并生成学习导读。</p>
+      <button type="button" class="primary-btn" @click="showImport = true">添加第一本图书</button>
+    </section>
 
     <div v-else class="book-grid">
-      <div v-for="book in books" :key="book.id" class="book-card">
+      <div v-for="(book, index) in books" :key="book.id" class="book-card">
         <div class="book-card-main">
-          <button class="delete-icon-btn" @click="deleteBook(book.id)" title="Delete Book">
-            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path></svg>
-          </button>
+          <div class="action-menu-wrap book-menu-wrap" @click.stop>
+            <button
+              class="book-menu-trigger"
+              type="button"
+              :aria-label="`管理《${book.title}》`"
+              :aria-expanded="openBookMenuId === book.id"
+              aria-haspopup="menu"
+              @click="toggleBookMenu(book.id)"
+            >
+              <span aria-hidden="true">•••</span>
+              <span v-if="profileStatuses[book.id]?.should_analyze" class="book-menu-alert" aria-hidden="true"></span>
+            </button>
+            <div v-if="openBookMenuId === book.id" class="action-menu book-action-menu" role="menu">
+              <p class="menu-section-label">图书操作</p>
+              <button class="menu-item" role="menuitem" @click="startEditing(book); closeMenus()">重命名</button>
+              <button
+                v-if="book.type === 'generated'"
+                class="menu-item console-btn"
+                role="menuitem"
+                title="Agent Console"
+                @click="openConsole(book); closeMenus()"
+              >
+                Agent Console
+              </button>
+              <button
+                v-if="shouldOfferTranslation(book)"
+                class="menu-item translate"
+                role="menuitem"
+                @click="translateBook(book); closeMenus()"
+              >
+                {{ book.status === 'failed' ? '重试翻译' : '开始翻译' }}
+              </button>
+              <button v-else-if="isBackgroundBusy(book)" class="menu-item" type="button" disabled>
+                {{ isTranslating(book) ? `翻译中 ${translationPercent(book)}%` : '正在生成导读' }}
+              </button>
+              <router-link :to="{ name: 'notes', params: { id: book.id }}" class="menu-item menu-link" role="menuitem" @click="closeMenus">
+                查看笔记
+              </router-link>
+              <button class="menu-item book-quiz-btn" role="menuitem" title="Book Quiz" @click="startBookQuiz(book); closeMenus()">
+                Book Quiz
+              </button>
+              <p class="menu-section-label">学习画像</p>
+              <button
+                class="menu-item profile-btn"
+                role="menuitem"
+                title="Analyze Learning Profile"
+                :disabled="profileAnalyzingBookId === book.id"
+                @click="analyzeLearningProfile(book); closeMenus()"
+              >
+                {{ profileAnalyzingBookId === book.id ? '分析中…' : 'Analyze Learning Profile' }}
+              </button>
+              <button
+                class="menu-item profile-view-btn"
+                role="menuitem"
+                title="View Learning Profile"
+                :disabled="profileLoading && selectedProfileBook?.id === book.id"
+                @click="openLearningProfile(book)"
+              >
+                View Learning Profile
+              </button>
+              <div class="menu-divider"></div>
+              <button class="menu-item menu-item-danger" role="menuitem" @click="requestDeleteBook(book); closeMenus()">删除图书</button>
+            </div>
+          </div>
 
           <div class="book-info">
+            <p class="book-sequence">VOLUME {{ formatBookIndex(index) }}</p>
             <div v-if="editingBookId === book.id" class="edit-title">
               <input
                 v-model="editTitle"
@@ -48,97 +137,65 @@
                 ref="titleInput"
               />
             </div>
-            <h3 v-else class="book-title" @dblclick="startEditing(book)" title="Double click to rename">
-              {{ book.title }}
+            <h3 v-else class="book-title" @dblclick="startEditing(book)" :title="bookTitleTooltip(book)">
+              {{ formatLibraryBookTitle(book.title) }}
             </h3>
 
             <div class="book-meta">
-              <span :class="['status-tag', book.status]">
-                <span class="status-dot"></span>
-                {{ statusLabel(book) }}
-              </span>
-              <span class="date">{{ new Date(book.created_at).toLocaleDateString() }}</span>
+              <div class="book-state-line">
+                <span :class="['status-tag', book.status]">
+                  <span v-if="book.status === 'translated'" class="status-check" aria-hidden="true">✓</span>
+                  <span v-else class="status-dot" aria-hidden="true"></span>
+                  {{ statusLabel(book) }}
+                </span>
+                <span v-if="profileStatuses[book.id]?.should_analyze" class="book-insight">
+                  <span aria-hidden="true"></span>
+                  学习画像已更新
+                </span>
+              </div>
+              <span class="date">{{ formatBookDate(book.created_at) }}</span>
             </div>
 
-            <div v-if="showBookProgress(book)" :class="['book-progress', { 'guides-progress': isGeneratingGuides(book) }]">
+            <div v-if="showBookProgress(book)" class="book-progress">
               <div class="progress-track">
                 <div
                   class="progress-fill"
-                  :style="isGeneratingGuides(book) ? undefined : { width: `${translationPercent(book)}%` }"
+                  :style="{ width: `${translationPercent(book)}%` }"
                 ></div>
               </div>
-              <span>{{ progressText(book) }}</span>
+              <span>{{ translationProgressText(book) }}</span>
             </div>
           </div>
         </div>
 
         <div class="book-actions">
-          <router-link :to="{ name: 'reader', params: { id: book.id }}" class="action-link main-action">
-            <button class="action-btn read">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a4 4 0 0 0-4-4H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a4 4 0 0 1 4-4h6z"></path></svg>
-              Open
-            </button>
+          <router-link :to="{ name: 'reader', params: { id: book.id }}" class="action-link main-action action-btn read">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 3h6a4 4 0 0 1 4 4v14a4 4 0 0 0-4-4H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a4 4 0 0 1 4-4h6z"></path></svg>
+            <span>继续阅读</span>
           </router-link>
-
-          <div class="secondary-actions">
-            <button
-              v-if="book.type === 'generated'"
-              class="action-btn console-btn"
-              @click="openConsole(book)"
-              title="Agent Console"
-            >
-              <span class="icon" style="font-size: 1rem;">terminal</span>
-              Console
-            </button>
-
-            <button
-              class="action-btn translate"
-              @click="translateBook(book)"
-              :disabled="isBackgroundBusy(book)"
-              :title="isTranslating(book) ? 'Translating...' : book.status === 'generating_guides' ? 'Generating guides...' : 'Translate'"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 8 6 6"></path><path d="m4 14 6-6 2-3"></path><path d="M2 5h12"></path><path d="M7 2h1"></path><path d="m22 22-5-10-5 10"></path><path d="M14 18h6"></path></svg>
-              <span>{{ isTranslating(book) ? `${translationPercent(book)}%` : book.status === 'generating_guides' ? 'Guides...' : 'Translate' }}</span>
-            </button>
-
-            <button
-              class="action-btn profile-btn"
-              @click="analyzeLearningProfile(book)"
-              :disabled="profileAnalyzingBookId === book.id"
-              title="Analyze Learning Profile"
-            >
-              {{ profileAnalyzingBookId === book.id ? 'Analyzing...' : 'Analyze' }}
-            </button>
-
-            <button
-              class="action-btn profile-view-btn"
-              @click="openLearningProfile(book)"
-              :disabled="profileLoading && selectedProfileBook?.id === book.id"
-              title="View Learning Profile"
-            >
-              Profile
-            </button>
-
-            <button
-              class="action-btn book-quiz-btn"
-              @click="startBookQuiz(book)"
-              title="Book Quiz"
-            >
-              Book Quiz
-            </button>
-
-            <router-link :to="{ name: 'notes', params: { id: book.id }}" class="action-link">
-               <button class="action-btn notes-btn" title="View Notes">
-                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.5 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z"></path><path d="M15 3v6h6"></path><line x1="9" y1="13" x2="15" y2="13"></line><line x1="9" y1="17" x2="15" y2="17"></line></svg>
-                 Notes
-               </button>
-            </router-link>
-          </div>
-          <p v-if="profileStatuses[book.id]?.should_analyze" class="learning-profile-hint">
-            你最近有新的笔记和 Quiz 记录，可以分析生成学习画像。
-          </p>
         </div>
       </div>
+    </div>
+
+    <Transition name="toast">
+      <div v-if="notification" class="app-toast" :class="`toast-${notification.type}`" role="status" aria-live="polite">
+        <span>{{ notification.message }}</span>
+        <button type="button" aria-label="关闭提示" @click="notification = null">×</button>
+      </div>
+    </Transition>
+
+    <div v-if="pendingDeleteBook" class="modal-overlay confirm-overlay" @click.self="pendingDeleteBook = null">
+      <section class="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-book-title">
+        <p class="confirm-kicker">删除图书</p>
+        <h2 id="delete-book-title">确定删除《{{ pendingDeleteBook.title }}》？</h2>
+        <p>章节、译文、导读和笔记会一并删除，此操作无法撤销。</p>
+        <footer class="confirm-actions">
+          <button type="button" class="secondary-btn" @click="pendingDeleteBook = null">取消</button>
+          <button type="button" class="danger-btn" :disabled="deletingBook" @click="deleteBook">
+            {{ deletingBook ? '正在删除…' : '确认删除' }}
+          </button>
+        </footer>
+      </section>
     </div>
 
     <!-- Modals -->
@@ -207,6 +264,7 @@ import SettingsModal from '../components/SettingsModal.vue'
 import MacroSettingsModal from '../components/MacroSettingsModal.vue'
 import AgentConsole from '../components/AgentConsole.vue'
 import { extractImportPreflight, formatImportErrorMessage } from '../utils/importPreflight'
+import { formatLibraryBookTitle } from '../utils/bookTitle'
 
 const bookStore = useBookStore()
 const router = useRouter()
@@ -214,6 +272,8 @@ const showImport = ref(false)
 const showSettings = ref(false)
 const showResponseStyles = ref(false)
 const showConsole = ref(false)
+const headerToolsOpen = ref(false)
+const openBookMenuId = ref(null)
 const selectedBook = ref(null)
 const uploading = ref(false)
 const importing = ref(false)
@@ -232,11 +292,24 @@ const profileLoading = ref(false)
 const profileError = ref('')
 const profileMarkdown = ref('')
 const profileSummary = ref('')
+const notification = ref(null)
+const pendingDeleteBook = ref(null)
+const deletingBook = ref(false)
 
 const books = computed(() => bookStore.books)
 const loading = computed(() => bookStore.loading)
 const error = computed(() => bookStore.error)
 const profileHtml = computed(() => renderMarkdown(profileMarkdown.value, selectedProfileBook.value))
+
+const formatBookIndex = (index) => String(index + 1).padStart(2, '0')
+
+const bookTitleTooltip = (book) => {
+  const originalTitle = String(book?.title || '').trim()
+  const displayTitle = formatLibraryBookTitle(originalTitle)
+  const renameHint = '双击书名或通过菜单重命名'
+  if (!originalTitle || originalTitle === displayTitle) return `${displayTitle}\n${renameHint}`
+  return `${displayTitle}\n原始名称：${originalTitle}\n${renameHint}`
+}
 
 const triggerRenderMath = () => {
   nextTick(() => {
@@ -246,7 +319,36 @@ const triggerRenderMath = () => {
   })
 }
 
+let notificationTimer = null
+
+const closeMenus = () => {
+  headerToolsOpen.value = false
+  openBookMenuId.value = null
+}
+
+const toggleHeaderTools = () => {
+  const nextValue = !headerToolsOpen.value
+  closeMenus()
+  headerToolsOpen.value = nextValue
+}
+
+const toggleBookMenu = (bookId) => {
+  const nextBookId = openBookMenuId.value === bookId ? null : bookId
+  closeMenus()
+  openBookMenuId.value = nextBookId
+}
+
+const showNotification = (message, type = 'info') => {
+  if (notificationTimer) window.clearTimeout(notificationTimer)
+  notification.value = { message, type }
+  notificationTimer = window.setTimeout(() => {
+    notification.value = null
+    notificationTimer = null
+  }, 4200)
+}
+
 onMounted(async () => {
+  document.addEventListener('click', closeMenus)
   await bookStore.fetchBooks()
   await loadLearningProfileStatuses()
   triggerRenderMath()
@@ -257,18 +359,18 @@ watch(books, triggerRenderMath, { deep: true })
 let pollingTimer = null
 
 const isTranslating = (book) => book?.status === 'translating'
-const isGeneratingGuides = (book) => book?.status === 'generating_guides'
 const isBackgroundBusy = (book) => ['translating', 'generating_guides'].includes(book?.status)
+const shouldOfferTranslation = (book) => !['translated', 'translating', 'generating_guides'].includes(book?.status)
 
 const statusLabel = (book) => {
   if (book.type === 'generated' && book.agent_stage && !['init', 'ready'].includes(book.agent_stage)) return book.agent_stage
   const labels = {
-    loaded: 'loaded',
-    translating: 'translating',
-    translated: 'translated',
-    generating: 'generating',
-    generating_guides: 'generating guides',
-    failed: 'failed'
+    loaded: '待翻译',
+    translating: '翻译中',
+    translated: '已翻译',
+    generating: '生成中',
+    generating_guides: '生成导读中',
+    failed: '处理失败'
   }
   return labels[book.status] || book.status
 }
@@ -280,20 +382,23 @@ const translationPercent = (book) => {
 }
 
 const showBookProgress = (book) => {
-  if (isGeneratingGuides(book)) return true
-  return Number(book.translation_total || 0) > 0 && ['loaded', 'translating', 'translated', 'failed'].includes(book.status)
+  return isTranslating(book) && Number(book.translation_total || 0) > 0
 }
 
 const translationProgressText = (book) => {
   const completed = Number(book.translation_completed || 0)
   const total = Number(book.translation_total || 0)
   const failed = Number(book.translation_failed || 0)
-  return failed > 0 ? `${completed}/${total} translated, ${failed} failed` : `${completed}/${total} translated`
+  return failed > 0 ? `${completed} / ${total} · ${failed} 个失败` : `${completed} / ${total}`
 }
 
-const progressText = (book) => {
-  if (isGeneratingGuides(book)) return 'Generating top-down guides...'
-  return translationProgressText(book)
+const formatBookDate = (value) => {
+  if (!value) return ''
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric'
+  }).format(new Date(value))
 }
 
 const syncPolling = () => {
@@ -310,6 +415,8 @@ watch(books, syncPolling, { deep: true })
 
 onBeforeUnmount(() => {
   if (pollingTimer) window.clearInterval(pollingTimer)
+  if (notificationTimer) window.clearTimeout(notificationTimer)
+  document.removeEventListener('click', closeMenus)
 })
 
 const handleStartAgent = () => {
@@ -348,6 +455,7 @@ const handleUpload = async (file) => {
     if (!applyImportConfirmationResult(result)) {
       pendingImport.value = null
       showImport.value = false
+      showNotification('图书已导入', 'success')
     }
   } catch (e) {
     const failedPreflight = extractImportPreflight(e)
@@ -355,7 +463,7 @@ const handleUpload = async (file) => {
       preflightWarning.value = failedPreflight
       if (failedPreflight.severity === 'blocked') pendingImport.value = null
     } else {
-      alert("Upload failed: " + importErrorMessage(e))
+      showNotification(`上传失败：${importErrorMessage(e)}`, 'error')
       pendingImport.value = null
     }
   } finally {
@@ -373,6 +481,7 @@ const handleImport = async (path) => {
     if (!applyImportConfirmationResult(result)) {
       pendingImport.value = null
       showImport.value = false
+      showNotification('图书已导入', 'success')
     }
   } catch (e) {
     const failedPreflight = extractImportPreflight(e)
@@ -380,7 +489,7 @@ const handleImport = async (path) => {
       preflightWarning.value = failedPreflight
       if (failedPreflight.severity === 'blocked') pendingImport.value = null
     } else {
-      alert("Import failed: " + importErrorMessage(e))
+      showNotification(`导入失败：${importErrorMessage(e)}`, 'error')
       pendingImport.value = null
     }
   } finally {
@@ -396,8 +505,9 @@ const handlePackageImport = async (file) => {
   try {
     await bookStore.importBookPackage(file)
     showImport.value = false
+    showNotification('图书包已导入', 'success')
   } catch (e) {
-    alert("Package import failed: " + importErrorMessage(e))
+    showNotification(`图书包导入失败：${importErrorMessage(e)}`, 'error')
   } finally {
     importing.value = false
   }
@@ -410,8 +520,9 @@ const handlePackageExport = async (bookId) => {
     const book = books.value.find((item) => item.id === bookId)
     const safeTitle = (book?.title || 'book').replace(/[^0-9A-Za-z._\-\s]+/g, '_').trim() || 'book'
     await bookStore.exportBookPackage(bookId, `${safeTitle}-${book?.uuid || bookId}.zip`)
+    showNotification('图书包已开始下载', 'success')
   } catch (e) {
-    alert("Package export failed: " + importErrorMessage(e))
+    showNotification(`图书包导出失败：${importErrorMessage(e)}`, 'error')
   } finally {
     importing.value = false
   }
@@ -448,13 +559,14 @@ const confirmPreflightImport = async () => {
     }
     pendingImport.value = null
     showImport.value = false
+    showNotification('图书已导入', 'success')
   } catch (e) {
     const failedPreflight = extractImportPreflight(e)
     if (failedPreflight) {
       preflightWarning.value = failedPreflight
       if (failedPreflight.severity === 'blocked') pendingImport.value = null
     } else {
-      alert("Import failed: " + importErrorMessage(e))
+      showNotification(`导入失败：${importErrorMessage(e)}`, 'error')
     }
   } finally {
     uploading.value = false
@@ -491,6 +603,7 @@ const confirmOutlineImport = async (outlinePlan) => {
     if (!applyImportConfirmationResult(result)) {
       pendingImport.value = null
       showImport.value = false
+      showNotification('图书已导入', 'success')
     }
   } catch (e) {
     const failedPreflight = extractImportPreflight(e)
@@ -498,7 +611,7 @@ const confirmOutlineImport = async (outlinePlan) => {
       preflightWarning.value = failedPreflight
       if (failedPreflight.severity === 'blocked') pendingImport.value = null
     } else {
-      alert("Import failed: " + importErrorMessage(e))
+      showNotification(`导入失败：${importErrorMessage(e)}`, 'error')
     }
   } finally {
     uploading.value = false
@@ -513,11 +626,12 @@ const cancelOutlineImport = () => {
 
 const onSaveSettings = (settings) => {
   console.log("Settings saved:", settings)
-  // Here we could also send to backend
+  showNotification('设置已保存', 'success')
 }
 
 const onSaveResponseStyles = (styles) => {
   console.log("Response styles saved:", styles)
+  showNotification('回复风格已保存', 'success')
 }
 
 const openConsole = (book) => {
@@ -537,17 +651,24 @@ const startEditing = (book) => {
 
 const saveTitle = async (book) => {
   if (editingBookId.value !== book.id) return
-  if (editTitle.value.trim() && editTitle.value !== book.title) {
-    await bookStore.renameBook(book.id, editTitle.value)
+  try {
+    if (editTitle.value.trim() && editTitle.value !== book.title) {
+      await bookStore.renameBook(book.id, editTitle.value.trim())
+      showNotification('图书名称已更新', 'success')
+    }
+  } catch (error) {
+    showNotification(`重命名失败：${error.message}`, 'error')
+  } finally {
+    editingBookId.value = null
   }
-  editingBookId.value = null
 }
 
 const translateBook = async (book) => {
   try {
     await bookStore.translateBook(book.id)
+    showNotification('翻译任务已开始', 'success')
   } catch (e) {
-    alert("Translation trigger failed: " + e.message)
+    showNotification(`无法开始翻译：${e.message}`, 'error')
   }
 }
 
@@ -579,8 +700,9 @@ const analyzeLearningProfile = async (book) => {
     profileLoading.value = false
     showProfileModal.value = true
     triggerRenderMath()
+    showNotification('学习画像已更新', 'success')
   } catch (e) {
-    alert("Learning profile analysis failed: " + e.message)
+    showNotification(`学习画像分析失败：${e.message}`, 'error')
   } finally {
     profileAnalyzingBookId.value = null
   }
@@ -593,6 +715,7 @@ const profileErrorMessage = (error) => {
 }
 
 const openLearningProfile = async (book) => {
+  closeMenus()
   selectedProfileBook.value = book
   profileMarkdown.value = ''
   profileSummary.value = ''
@@ -635,17 +758,27 @@ const startBookQuiz = async (book) => {
       }
     })
   } catch (e) {
-    alert("Book Quiz failed: " + e.message)
+    showNotification(`无法开始 Book Quiz：${e.message}`, 'error')
   }
 }
 
-const deleteBook = async (id) => {
-  if (!confirm("Are you sure you want to delete this book? This action cannot be undone.")) return
+const requestDeleteBook = (book) => {
+  pendingDeleteBook.value = book
+}
+
+const deleteBook = async () => {
+  if (!pendingDeleteBook.value || deletingBook.value) return
+  const book = pendingDeleteBook.value
+  deletingBook.value = true
 
   try {
-    await bookStore.deleteBook(id)
+    await bookStore.deleteBook(book.id)
+    pendingDeleteBook.value = null
+    showNotification('图书已删除', 'success')
   } catch (e) {
-    alert("Delete failed: " + e.message)
+    showNotification(`删除失败：${e.message}`, 'error')
+  } finally {
+    deletingBook.value = false
   }
 }
 </script>
@@ -928,21 +1061,6 @@ const deleteBook = async (id) => {
   transition: width 0.25s ease;
 }
 
-.guides-progress .progress-track {
-  position: relative;
-}
-
-.guides-progress .progress-fill {
-  width: 45%;
-  background: linear-gradient(90deg, #06b6d4, #67e8f9, #0891b2);
-  animation: guides-progress-slide 1.2s ease-in-out infinite;
-}
-
-@keyframes guides-progress-slide {
-  0% { transform: translateX(-110%); }
-  100% { transform: translateX(230%); }
-}
-
 @keyframes pulse {
   0% { opacity: 1; }
   50% { opacity: 0.4; }
@@ -1058,17 +1176,6 @@ const deleteBook = async (id) => {
 .action-btn.profile-view-btn:disabled {
   opacity: 0.6;
   cursor: wait;
-}
-
-.learning-profile-hint {
-  margin: 0.05rem 0 0;
-  padding: 0.52rem 0.65rem;
-  color: #7c4a03;
-  font-size: 0.74rem;
-  line-height: 1.45;
-  background: #fffbeb;
-  border: 1px solid #fde68a;
-  border-radius: 12px;
 }
 
 .delete-icon-btn {

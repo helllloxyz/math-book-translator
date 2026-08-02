@@ -1,12 +1,29 @@
 <template>
   <header class="reader-toolbar" ref="toolbarRef">
     <div class="toolbar-left">
-      <h2 v-if="bookTitle">{{ bookTitle }}</h2>
+      <button
+        type="button"
+        class="panel-toggle-button"
+        :title="sidebarOpen ? '收起目录' : '展开目录'"
+        :aria-label="sidebarOpen ? '收起目录' : '展开目录'"
+        :aria-pressed="sidebarOpen"
+        @click="$emit('toggle-sidebar')"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 5h16v14H4zM9 5v14M12.5 9h4M12.5 12h4M12.5 15h2.5"></path>
+        </svg>
+      </button>
+      <div class="reader-breadcrumbs">
+        <span v-if="bookTitle">{{ bookTitle }}</span>
+        <h2 v-if="currentTitle">{{ currentTitle }}</h2>
+        <h2 v-else-if="bookTitle">选择章节开始阅读</h2>
+      </div>
     </div>
 
     <div class="toolbar-right">
       <div v-if="canEditChapterStatus" class="status-controls" aria-label="Chapter reading status">
         <label class="status-field">
+          <span class="status-field-label">阅读进度</span>
           <select
             class="status-select"
             :class="progressClass"
@@ -23,6 +40,7 @@
           </select>
         </label>
         <label class="status-field">
+          <span class="status-field-label">理解程度</span>
           <select
             class="status-select"
             :class="difficultyClass"
@@ -56,7 +74,7 @@
             <rect x="14" y="4" width="7" height="16" rx="1.5"></rect>
             <path d="M5.4 8h2.8M5.4 11h2M15.8 8h2.8M15.8 11h2M15.8 14h2.3"></path>
           </svg>
-          <span class="sr-only">Translation dual panel</span>
+          <span class="tool-label">原文对照</span>
         </button>
         <button
           type="button"
@@ -73,7 +91,7 @@
             <path d="M9 4.5v13M15 6.5v13"></path>
             <path d="M12 9.2l1.2 2.5 2.6.4-1.9 1.9.5 2.6-2.4-1.3-2.4 1.3.5-2.6-1.9-1.9 2.6-.4z"></path>
           </svg>
-          <span class="sr-only">Guide dual panel</span>
+          <span class="tool-label">章节导读</span>
         </button>
         <button
           type="button"
@@ -87,7 +105,7 @@
             <path d="M9.3 9a2.8 2.8 0 1 1 4.5 2.2c-1 .7-1.8 1.3-1.8 2.8"></path>
             <circle cx="12" cy="12" r="9"></circle>
           </svg>
-          <span class="sr-only">Quiz</span>
+          <span class="tool-label">Quiz</span>
         </button>
         <button
           type="button"
@@ -103,9 +121,13 @@
             <path d="M15 4v4h4M8.5 11h7M8.5 14h7M8.5 17h4"></path>
           </svg>
           <span class="notes-dot" aria-hidden="true"></span>
-          <span class="sr-only">{{ notesOpen ? 'Notes on' : 'Notes off' }}</span>
+          <span class="tool-label">笔记</span>
+          <span v-if="notesCount" class="tool-count" aria-label="笔记数量">{{ notesCount }}</span>
         </button>
       </div>
+    </div>
+    <div class="chapter-progress-track" aria-hidden="true">
+      <span :style="{ width: `${readingPercent}%` }"></span>
     </div>
   </header>
 </template>
@@ -121,6 +143,10 @@ import {
 
 const props = defineProps({
   bookTitle: {
+    type: String,
+    default: ''
+  },
+  currentTitle: {
     type: String,
     default: ''
   },
@@ -140,15 +166,28 @@ const props = defineProps({
     type: String,
     required: true
   },
+  sidebarOpen: {
+    type: Boolean,
+    default: true
+  },
   notesOpen: {
     type: Boolean,
     default: true
+  },
+  notesCount: {
+    type: Number,
+    default: 0
+  },
+  readingPercent: {
+    type: Number,
+    default: 0
   }
 })
 
 defineEmits([
   'set-view-mode',
   'open-quiz',
+  'toggle-sidebar',
   'toggle-notes',
   'update-reading-progress',
   'update-reading-difficulty'

@@ -28,12 +28,17 @@ assert.match(source, /setViewMode/, 'Reader should use explicit view mode select
 assert.match(source, /canUseChapterContent/, 'Reader should allow guide dual whenever the selected item carries a chapter id')
 assert.match(source, /loadItemFromRouteQuery/, 'Reader should load content from reader URL query after initial mount')
 assert.match(source, /route\.query\.chapter_id/, 'Reader should react when the chapter_id query changes on the same reader route')
+assert.match(source, /sidebarOpen/, 'Reader should let the toolbar collapse the table of contents')
+assert.match(source, /focusRouteNote/, 'Reader should restore and highlight a note opened from the Notes page')
+assert.match(source, /route\.query\.note_id/, 'Reader should accept explicit note deep links')
 
 const panesSource = readFileSync(resolve(currentDir, '../components/ReaderPanes.vue'), 'utf8')
 assert.match(panesSource, /No chapter guide is available for this chapter yet\./, 'Guide dual pane should keep the missing-guide empty state')
 assert.match(panesSource, /props\.viewMode === 'guide-dual'\) return 'guide-dual'/, 'Guide dual pane should not fall back to single just because source HTML is empty')
 assert.match(panesSource, /guideUnavailable/, 'Guide dual pane should show the empty state when the right pane has no rendered guide HTML')
 assert.match(panesSource, /leftPaneHtml/, 'Guide dual pane should be able to use a different left pane source than translation dual')
+assert.match(panesSource, /syncPaneScroll/, 'Dual panes should synchronize their scroll position')
+assert.match(panesSource, /scroll-progress/, 'Reader panes should report chapter reading progress')
 
 const contentSource = readFileSync(resolve(currentDir, '../composables/useReaderContent.js'), 'utf8')
 assert.match(contentSource, /data\.content_translated === 'string' && data\.content_translated\.trim\(\)/, 'Reader content should fall back to raw chapter content when translated content is blank')

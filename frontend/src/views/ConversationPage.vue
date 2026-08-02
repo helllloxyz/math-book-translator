@@ -15,6 +15,21 @@
       <h1>Conversation not found</h1>
       <p>Open the note from the reader again.</p>
     </section>
+
+    <div v-if="pendingDeleteTarget" class="modal-overlay confirm-overlay" @click.self="pendingDeleteTarget = null">
+      <section class="confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-conversation-title">
+        <p class="confirm-kicker">删除对话</p>
+        <h2 id="delete-conversation-title">确定删除这段笔记对话？</h2>
+        <p>已保存的问答内容会一并删除，此操作无法撤销。</p>
+        <p v-if="deleteError" class="confirm-inline-error">{{ deleteError }}</p>
+        <footer class="confirm-actions">
+          <button type="button" class="secondary-btn" :disabled="deleting" @click="pendingDeleteTarget = null">取消</button>
+          <button type="button" class="danger-btn" :disabled="deleting" @click="confirmDelete">
+            {{ deleting ? '正在删除…' : '确认删除' }}
+          </button>
+        </footer>
+      </section>
+    </div>
   </main>
 </template>
 
@@ -41,6 +56,9 @@ const contextText = ref('')
 const chapterSummary = ref('')
 const metadata = ref({})
 const mode = ref('note')
+const pendingDeleteTarget = ref(null)
+const deleting = ref(false)
+const deleteError = ref('')
 
 const persist = (updatedCard = card.value) => {
   if (!conversationId || !updatedCard) return
@@ -82,13 +100,28 @@ const handleGoSource = () => {
   window.open(`/book/${metadata.value.bookId}${query ? `?${query}` : ''}`, '_blank', 'noopener')
 }
 
-const handleDelete = async (target) => {
+const handleDelete = (target) => {
   if (!target?.noteId) return
-  if (!window.confirm('Delete this conversation?')) return
-  await bookStore.deleteNote(target.noteId)
-  window.localStorage.removeItem(conversationStorageKey(conversationId))
-  card.value = null
-  document.title = 'Conversation not found'
+  pendingDeleteTarget.value = target
+  deleteError.value = ''
+}
+
+const confirmDelete = async () => {
+  if (!pendingDeleteTarget.value || deleting.value) return
+  const target = pendingDeleteTarget.value
+  deleting.value = true
+  deleteError.value = ''
+  try {
+    await bookStore.deleteNote(target.noteId)
+    window.localStorage.removeItem(conversationStorageKey(conversationId))
+    pendingDeleteTarget.value = null
+    card.value = null
+    document.title = 'Conversation not found'
+  } catch (error) {
+    deleteError.value = `删除失败：${error.message}`
+  } finally {
+    deleting.value = false
+  }
 }
 
 onMounted(() => {

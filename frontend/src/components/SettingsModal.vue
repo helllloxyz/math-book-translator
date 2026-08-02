@@ -175,9 +175,12 @@
             </div>
           </section>
 
+          <p v-if="formError" class="settings-form-error" role="alert">{{ formError }}</p>
           <div class="form-actions">
-            <button type="button" class="cancel-btn" @click="$emit('close')">Cancel</button>
-            <button type="submit" class="save-btn primary-btn">Save Settings</button>
+            <button type="button" class="cancel-btn" :disabled="isSaving" @click="$emit('close')">取消</button>
+            <button type="submit" class="save-btn primary-btn" :disabled="isSaving">
+              {{ isSaving ? '正在保存…' : '保存设置' }}
+            </button>
           </div>
         </form>
       </div>
@@ -216,6 +219,8 @@ const selectedModel = ref('')
 const customModelName = ref('')
 const apiKey = ref('')
 const baseUrl = ref('')
+const formError = ref('')
+const isSaving = ref(false)
 
 const COMPATIBLE_ENTRY_ID = 'openai-compatible'
 const FIXED_PROVIDER_IDS = ['openai', 'deepseek', 'gemini', 'anthropic']
@@ -543,6 +548,7 @@ onMounted(async () => {
     hydrateTaskProfileSelections(profiles)
   } catch (e) {
     console.error("Failed to fetch settings:", e)
+    formError.value = `服务器设置加载失败，当前显示本地缓存：${e.message}`
     // Fallback to localStorage
     const saved = localStorage.getItem('app_settings')
     if (saved) {
@@ -553,21 +559,23 @@ onMounted(async () => {
 })
 
 const saveSettings = async () => {
+  formError.value = ''
+  isSaving.value = true
   try {
     const provider = selectedProvider.value
     if (!provider) {
-      alert('Select an LLM provider first')
+      formError.value = '请先选择一个 LLM 服务商。'
       return
     }
     const model = resolvedModel.value
     if (!model) {
-      alert('Select or enter a model name')
+      formError.value = '请选择或输入模型名称。'
       return
     }
     updateCredentialDraftFromForm()
     const nextTaskProfiles = buildTaskProfilesFromSelections()
     if (!nextTaskProfiles.default) {
-      alert('Select a Default model first')
+      formError.value = '请先为默认任务选择一个模型。'
       return
     }
 
@@ -578,7 +586,7 @@ const saveSettings = async () => {
         response = await apiClient.put(`/credentials/${existing.credential_id}`, draft)
       } else {
         if (!draft.api_key) {
-          alert(`API key is required for ${draft.provider_id}`)
+          formError.value = `${draft.provider_id} 需要填写 API Key。`
           return
         }
         response = await apiClient.post('/credentials', draft)
@@ -598,7 +606,9 @@ const saveSettings = async () => {
     emit('save', settings.value)
     emit('close')
   } catch (e) {
-    alert("Error saving settings: " + (e.response?.data?.detail || e.message))
+    formError.value = `设置保存失败：${e.response?.data?.detail || e.message}`
+  } finally {
+    isSaving.value = false
   }
 }
 </script>

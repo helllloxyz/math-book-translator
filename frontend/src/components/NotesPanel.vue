@@ -3,11 +3,12 @@
     <header class="notes-header">
       <div class="title-group">
         <p v-if="currentTitle" class="chapter-title">{{ currentTitle }}</p>
-        <h2>Notes</h2>
+        <h2>章节笔记</h2>
       </div>
-      <button type="button" class="chapter-note-button" @click="emit('create-chapter-note')">
-        +
-      </button>
+      <div class="notes-header-actions">
+        <button type="button" class="chapter-note-button" title="新建章节笔记" aria-label="新建章节笔记" @click="emit('create-chapter-note')">+</button>
+        <button type="button" class="notes-close-button" title="收起笔记" aria-label="收起笔记" @click="emit('close')">×</button>
+      </div>
     </header>
 
     <section v-if="noteCards.length" class="notes-list" aria-label="Saved notes">
@@ -51,7 +52,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['create-chapter-note', 'activate-note'])
+const emit = defineEmits(['create-chapter-note', 'activate-note', 'close'])
 
 const noteCards = computed(() => props.notes.filter((note) => note && note.type !== 'quiz'))
 

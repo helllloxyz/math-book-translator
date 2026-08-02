@@ -44,41 +44,59 @@
 
       <div class="dialog-panel">
         <header class="dialog-header">
-          <span class="dialog-status-dot" aria-hidden="true"></span>
-          <div class="header-copy">
-            <div class="header-title-row">
-              <span class="mode-label">{{ dialogTitle }}</span>
-              <strong>{{ card.questionSummary || card.title || fallbackTitle }}</strong>
+          <div class="header-primary-row">
+            <span class="dialog-status-dot" aria-hidden="true"></span>
+            <div class="header-copy">
+              <div class="header-title-row">
+                <span class="mode-label">{{ dialogTitle }}</span>
+                <strong>{{ card.questionSummary || card.title || fallbackTitle }}</strong>
+              </div>
             </div>
-            <section v-if="standalone && metadataFields.length" class="standalone-context-summary" aria-label="Conversation metadata">
-              <span v-for="field in metadataFields" :key="field.label">
-                {{ field.label }}: {{ field.value }}
-              </span>
-            </section>
-          </div>
-          <p class="header-meta">{{ modelLabel }} · {{ sourceCount }} {{ sourceCount === 1 ? 'source' : 'sources' }}</p>
-          <div v-if="standalone" class="standalone-actions" aria-label="Conversation actions">
-            <button
-              v-if="canGoSource"
-              type="button"
-              class="source-button"
-              @click="emit('go-source', card)"
-            >
-              Go to source
-            </button>
+            <p v-if="!standalone" class="header-meta">{{ modelLabel }} · {{ sourceCount }} {{ sourceCount === 1 ? 'source' : 'sources' }}</p>
+            <div v-if="standalone" class="standalone-actions" aria-label="Conversation actions">
+              <button
+                v-if="canGoSource"
+                type="button"
+                class="source-button"
+                @click="emit('go-source', card)"
+              >
+                Go to source
+              </button>
 
-            <button
-              v-if="canDelete"
-              type="button"
-              class="delete-conversation-button"
-              @click="emit('delete', card)"
-            >
-              Delete
+              <details class="standalone-details">
+                <summary>
+                  <span>详细信息</span>
+                  <small>{{ metadataFields.length + 2 }}</small>
+                </summary>
+                <dl class="standalone-details-grid">
+                  <div v-for="field in metadataFields" :key="field.label">
+                    <dt>{{ field.label }}</dt>
+                    <dd>{{ field.value }}</dd>
+                  </div>
+                  <div>
+                    <dt>Model</dt>
+                    <dd>{{ modelLabel }}</dd>
+                  </div>
+                  <div>
+                    <dt>Sources</dt>
+                    <dd>{{ sourceCount }}</dd>
+                  </div>
+                </dl>
+              </details>
+
+              <button
+                v-if="canDelete"
+                type="button"
+                class="delete-conversation-button"
+                @click="emit('delete', card)"
+              >
+                Delete
+              </button>
+            </div>
+            <button v-if="!standalone" type="button" class="close-button" aria-label="Close conversation" @click="emit('close')">
+              ×
             </button>
           </div>
-          <button v-if="!standalone" type="button" class="close-button" aria-label="Close conversation" @click="emit('close')">
-            ×
-          </button>
         </header>
 
         <div class="dialog-content">
@@ -450,20 +468,38 @@ onUnmounted(() => {
 .dialog-header {
   flex-shrink: 0;
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
   min-height: 40px;
   padding: 8px 14px;
   border-bottom: 0.5px solid var(--dialog-border);
   background: var(--dialog-bg-secondary);
 }
 
+.header-primary-row {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .conversation-dialog.standalone .dialog-header {
-  min-height: 72px;
-  padding: 14px max(24px, calc((100vw - 760px) / 2));
+  width: min(780px, calc(100% - 48px));
+  min-height: auto;
+  margin: 0 auto;
+  padding: 18px 20px 12px;
   border-bottom-color: rgba(102, 84, 66, 0.16);
-  background: rgba(250, 247, 241, 0.92);
-  backdrop-filter: blur(18px);
+  background: transparent;
+}
+
+.conversation-dialog.standalone .header-primary-row {
+  align-items: flex-start;
+}
+
+.conversation-dialog.standalone .dialog-status-dot {
+  margin-top: 0.42rem;
 }
 
 .header-copy {
@@ -474,9 +510,7 @@ onUnmounted(() => {
 }
 
 .conversation-dialog.standalone .header-copy {
-  align-items: flex-start;
-  flex-direction: column;
-  gap: 5px;
+  flex: 1;
 }
 
 .header-title-row {
@@ -516,25 +550,128 @@ onUnmounted(() => {
 }
 
 .conversation-dialog.standalone .dialog-header strong {
-  max-width: min(640px, calc(100vw - 2rem));
+  display: -webkit-box;
+  max-width: 100%;
+  overflow: hidden;
   color: #25201a;
-  font-size: 15px;
+  font-size: 16px;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
-.standalone-context-summary {
+.conversation-dialog.standalone .header-title-row {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.standalone-details {
+  position: static;
+  width: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.standalone-details summary {
+  min-height: 30px;
   display: flex;
-  flex-wrap: wrap;
-  gap: 5px 12px;
-  color: #7b7064;
-  font-size: 12px;
-  line-height: 1.35;
+  align-items: center;
+  gap: 7px;
+  padding: 0.42rem 0.72rem;
+  border: 0.5px solid rgba(102, 84, 66, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 253, 249, 0.72);
+  color: #75695d;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.3;
+  list-style: none;
+  transition: border-color 180ms ease, background-color 180ms ease, color 180ms ease;
 }
 
-.standalone-context-summary span {
+.standalone-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.standalone-details summary::after {
+  content: '⌄';
+  color: #998a7b;
+  font-size: 12px;
+  transform: translateY(-1px);
+  transition: transform 180ms ease;
+}
+
+.standalone-details[open] summary::after {
+  transform: rotate(180deg) translateY(-1px);
+}
+
+.standalone-details summary:hover,
+.standalone-details[open] summary {
+  border-color: rgba(102, 84, 66, 0.32);
+  background: #ffffff;
+  color: #29231d;
+}
+
+.standalone-details summary small {
+  color: #a09284;
+  font: inherit;
+  font-size: 10px;
+}
+
+.standalone-details-grid {
+  position: absolute;
+  top: calc(100% + 9px);
+  right: 0;
+  z-index: 30;
+  width: min(34rem, calc(100vw - 3rem));
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 24px;
+  margin: 0;
+  padding: 16px;
+  border: 0.5px solid rgba(102, 84, 66, 0.2);
+  border-radius: 12px;
+  background: rgba(255, 253, 249, 0.98);
+  box-shadow: 0 18px 44px rgba(45, 35, 24, 0.14);
+  backdrop-filter: blur(16px);
+}
+
+.standalone-details-grid div {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  justify-items: start;
+  gap: 4px;
+  text-align: left;
+}
+
+.standalone-details-grid dt {
+  width: 100%;
+  margin: 0;
+  color: #998a7b;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.standalone-details-grid dd {
+  width: 100%;
+  margin: 0;
+  color: #554b42;
+  font-size: 11px;
+  line-height: 1.35;
   overflow-wrap: anywhere;
+  text-align: left;
 }
 
 .standalone-actions {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;

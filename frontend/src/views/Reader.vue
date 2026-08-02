@@ -1,7 +1,10 @@
 <template>
-  <div class="reader-layout-wrapper">
+  <div
+    class="reader-layout-wrapper"
+    :class="{ 'sidebar-collapsed': !sidebarOpen, 'notes-collapsed': !notesPanelOpen }"
+  >
     <Sidebar
-      v-if="book"
+      v-if="book && sidebarOpen"
       :book-tree="bookTree"
       :guide-tree="guideTree"
       :current-item-id="currentItem?.id"
@@ -12,15 +15,20 @@
     <div class="reader-main">
       <ReaderToolbar
         :book-title="book?.title || ''"
+        :current-title="currentItem?.title || ''"
         :can-edit-chapter-status="currentItem?.type === 'chapter'"
         :can-toggle-view-mode="canUseChapterContent"
         :reading-status="chapterReadingStatus"
         :view-mode="viewMode"
+        :sidebar-open="sidebarOpen"
         :notes-open="notesPanelOpen"
+        :notes-count="askCards.length"
+        :reading-percent="readingPercent"
         @update-reading-progress="updateChapterProgress"
         @update-reading-difficulty="updateChapterDifficulty"
         @set-view-mode="setViewMode"
         @open-quiz="openQuizDialog"
+        @toggle-sidebar="sidebarOpen = !sidebarOpen"
         @toggle-notes="notesPanelOpen = !notesPanelOpen"
       />
 
@@ -36,6 +44,7 @@
         :guide-item="currentChapterGuide"
         :guide-loading="guideLoading"
         :view-mode="viewMode"
+        @scroll-progress="readingPercent = $event"
         @go-next="goToReaderItem(nextReaderItem)"
         @go-previous="goToReaderItem(previousReaderItem)"
       />
@@ -46,6 +55,7 @@
       :notes="askCards"
       :active-id="activeConversationId"
       :current-title="currentToolSubject.title_zh"
+      @close="notesPanelOpen = false"
       @create-chapter-note="openChapterNote"
       @activate-note="activateNoteCard"
     />
@@ -157,7 +167,9 @@ const {
 
 const viewportRef = ref(null)
 const viewMode = ref('single')
-const notesPanelOpen = ref(true)
+const sidebarOpen = ref(true)
+const notesPanelOpen = ref(typeof window === 'undefined' ? true : window.innerWidth > 1440)
+const readingPercent = ref(0)
 const chapterLearning = ref(createEmptyLearningContext())
 const learningContextChapterId = ref(null)
 const chapterReadingStatus = ref(defaultChapterReadingStatus())
@@ -425,6 +437,7 @@ const loadItemFromRouteQuery = async () => {
 
 const handleItemSelect = async (item, options = {}) => {
   closeMenu()
+  readingPercent.value = 0
   if (item?.type !== 'chapter') {
     viewMode.value = 'single'
     resetGuidePane()
@@ -678,6 +691,19 @@ const focusSelectionSource = async (card) => {
   marker.scrollIntoView({ behavior: 'smooth', block: 'center' })
 }
 
+const focusRouteNote = async () => {
+  const noteId = String(route.query.note_id || '')
+  if (!noteId) return
+  const card = askCards.value.find((item) => String(item.noteId || '') === noteId)
+  if (!card) return
+
+  notesPanelOpen.value = true
+  activateAskCard(card)
+  if (card.type === 'selection') {
+    await focusSelectionSource(card)
+  }
+}
+
 onMounted(async () => {
   const routeBookId = Number(route.params.id)
   let bookId = Number.isFinite(routeBookId) ? routeBookId : book.value?.id
@@ -707,6 +733,7 @@ onMounted(async () => {
   }
 
   await loadItemFromRouteQuery()
+  await focusRouteNote()
   if (route.query.quiz === '1') {
     let personalization = ''
     try {
@@ -745,10 +772,12 @@ watch(
     route.params.id,
     route.query.reader_type,
     route.query.chapter_id,
-    route.query.guide_id
+    route.query.guide_id,
+    route.query.note_id
   ],
-  () => {
-    loadItemFromRouteQuery()
+  async () => {
+    await loadItemFromRouteQuery()
+    await focusRouteNote()
   }
 )
 </script>

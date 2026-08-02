@@ -3,11 +3,12 @@
     <div class="note-header" @click="toggleCollapse">
       <div class="header-left">
           <span class="collapse-icon">{{ isCollapsed ? '▶' : '▼' }}</span>
-          <span class="note-title">{{ note.title || 'Conversation' }}</span>
+          <span class="note-title">{{ note.title || '未命名笔记' }}</span>
       </div>
       <div class="header-right">
           <span class="note-date" v-if="note.created_at && !isCollapsed">{{ formatDate(note.created_at) }}</span>
-          <button @click.stop="confirmDelete" class="delete-btn" title="Delete Note">×</button>
+          <button v-if="note.chapter_id" type="button" class="source-btn" title="返回对应章节" @click.stop="emit('open-source')">返回原文</button>
+          <button type="button" @click.stop="emit('delete')" class="delete-btn" title="删除笔记">×</button>
       </div>
     </div>
     
@@ -21,13 +22,13 @@
       <div class="chat-input-area">
         <textarea 
             v-model="inputPrompt" 
-            placeholder="Ask a question..." 
+            placeholder="继续追问…"
             @keydown.enter.exact.prevent="sendChat"
             @click.stop
             :disabled="note.loading"
         ></textarea>
         <button @click.stop="sendChat" :disabled="!inputPrompt.trim() || note.loading">
-            {{ note.loading ? '...' : 'Send' }}
+            {{ note.loading ? '发送中…' : '发送' }}
         </button>
       </div>
     </div>
@@ -53,7 +54,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['delete', 'chat', 'toggle-expand'])
+const emit = defineEmits(['delete', 'chat', 'toggle-expand', 'open-source'])
 
 const isCollapsed = ref(true)
 const inputPrompt = ref('')
@@ -64,12 +65,6 @@ const toggleCollapse = () => {
     if (!isCollapsed.value) {
         renderMath()
     }
-}
-
-const confirmDelete = () => {
-  if (confirm('Are you sure you want to delete this note?')) {
-    emit('delete')
-  }
 }
 
 const sendChat = () => {
@@ -90,7 +85,11 @@ const renderedContent = computed(() => {
 
 const formatDate = (dateStr) => {
   if (!dateStr) return ''
-  return new Date(dateStr).toLocaleDateString()
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric'
+  }).format(new Date(dateStr))
 }
 
 const contentRef = ref(null)

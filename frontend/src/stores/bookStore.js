@@ -11,6 +11,7 @@ export const useBookStore = defineStore('book', {
   actions: {
     async fetchBooks() {
       this.loading = true
+      this.error = null
       try {
         const response = await apiClient.get('/books')
         this.books = response.data

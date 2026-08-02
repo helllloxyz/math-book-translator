@@ -1,7 +1,14 @@
 <template>
-  <main ref="viewportRef" class="content-viewport" :class="effectiveViewMode">
-    <div v-if="loading" class="center-state">Loading content...</div>
-    <div v-else-if="!currentItem" class="center-state">Select an item to start reading.</div>
+  <main ref="viewportRef" class="content-viewport" :class="effectiveViewMode" @scroll="handleViewportScroll">
+    <div v-if="loading" class="reader-content-skeleton" aria-label="正在加载章节">
+      <span class="content-skeleton-title"></span>
+      <span v-for="index in 7" :key="index" class="content-skeleton-line" :class="`line-${index}`"></span>
+    </div>
+    <section v-else-if="!currentItem" class="center-state reader-empty-state">
+      <span aria-hidden="true">§</span>
+      <h2>选择一个章节开始阅读</h2>
+      <p>目录中的章节、学习摘要和导读会在这里展开。</p>
+    </section>
 
     <template v-else-if="effectiveViewMode === 'single'">
       <div class="pane-container single-layout">
@@ -37,7 +44,7 @@
     </template>
 
     <template v-else>
-      <div class="pane source-pane">
+      <div ref="leftPaneRef" class="pane source-pane" @scroll="syncPaneScroll('left', $event)">
         <div
           class="markdown-body latex-content"
           :key="leftPaneKey"
@@ -45,7 +52,7 @@
         ></div>
       </div>
 
-      <div class="pane target-pane">
+      <div ref="rightPaneRef" class="pane target-pane" @scroll="syncPaneScroll('right', $event)">
         <div v-if="isGuideDual && guideLoading" class="pane-state">Loading chapter guide...</div>
         <div v-else-if="guideUnavailable" class="pane-state">
           No chapter guide is available for this chapter yet.
@@ -84,7 +91,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 
 const viewportRef = defineModel('viewportRef')
 
@@ -131,7 +138,10 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['go-previous', 'go-next'])
+const emit = defineEmits(['go-previous', 'go-next', 'scroll-progress'])
+const leftPaneRef = ref(null)
+const rightPaneRef = ref(null)
+const syncScrollLock = ref(false)
 
 const effectiveViewMode = computed(() => {
   if (props.viewMode === 'guide-dual') return 'guide-dual'
@@ -160,6 +170,35 @@ const rightPaneHtml = computed(() => {
 const guideUnavailable = computed(() => {
   return isGuideDual.value && !String(rightPaneHtml.value || '').trim()
 })
+
+const emitScrollProgress = (element) => {
+  if (!element) return
+  const scrollRange = element.scrollHeight - element.clientHeight
+  const progress = scrollRange <= 0 ? 0 : Math.round((element.scrollTop / scrollRange) * 100)
+  emit('scroll-progress', Math.max(0, Math.min(100, progress)))
+}
+
+const handleViewportScroll = (event) => {
+  if (effectiveViewMode.value === 'single') emitScrollProgress(event.currentTarget)
+}
+
+const syncPaneScroll = (side, event) => {
+  if (syncScrollLock.value || !['dual', 'guide-dual'].includes(effectiveViewMode.value)) return
+  const source = event.currentTarget
+  const target = side === 'left' ? rightPaneRef.value : leftPaneRef.value
+  if (!source || !target) return
+  emitScrollProgress(source)
+
+  const sourceRange = source.scrollHeight - source.clientHeight
+  const targetRange = target.scrollHeight - target.clientHeight
+  if (sourceRange <= 0 || targetRange <= 0) return
+
+  syncScrollLock.value = true
+  target.scrollTop = (source.scrollTop / sourceRange) * targetRange
+  window.requestAnimationFrame(() => {
+    syncScrollLock.value = false
+  })
+}
 
 const leftPaneKey = computed(() => {
   return isGuideDual.value

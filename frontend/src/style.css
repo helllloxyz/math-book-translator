@@ -23,6 +23,10 @@
   --color-danger-soft: #f5dfdc;
   --color-info: #607d91;
   --color-info-soft: #e4edf2;
+  --color-context-bg: #f1efea;
+  --color-context-line: #ddd7cd;
+  --color-context-ink: #514b43;
+  --color-context-accent: #9a8e80;
 
   --font-ui: "Avenir Next", Avenir, "Segoe UI Variable", "PingFang SC", "Hiragino Sans GB", sans-serif;
   --font-display: "Iowan Old Style", Baskerville, "Source Han Serif SC", "Songti SC", STSong, serif;

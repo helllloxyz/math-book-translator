@@ -22,6 +22,8 @@ assert.match(source, /availableProfileKeys\.has\(selections\.default\)/, 'stale 
 assert.match(source, /credentials\.value = upsertCredentialSummary/, 'saving a credential should immediately update configured provider state')
 assert.match(source, /const defaultProviderId = profiles\.default\?\.provider_id/, 'loading settings should validate the saved default provider before selecting it')
 assert.match(source, /credentialForProviderId\(defaultProviderId\) \? defaultProviderId : providerIdFromCredential/, 'stale defaults should fall back to the first configured credential in the provider form')
+assert.match(source, /formError/, 'settings validation should render inline errors')
+assert.doesNotMatch(source, /\balert\s*\(/, 'settings should not use blocking browser alerts')
 
 const catalog = providerOptions.provider_catalog
 const byId = new Map(catalog.map((provider) => [provider.provider_id, provider]))
