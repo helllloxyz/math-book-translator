@@ -45,7 +45,7 @@
         :guide-loading="guideLoading"
         :view-mode="viewMode"
         @scroll-progress="readingPercent = $event"
-        @go-next="goToReaderItem(nextReaderItem)"
+        @go-next="goToNextReaderItem"
         @go-previous="goToReaderItem(previousReaderItem)"
       />
     </div>
@@ -470,6 +470,23 @@ const goToReaderItem = async (item) => {
   await handleItemSelect(item)
 }
 
+const goToNextReaderItem = async () => {
+  if (!nextReaderItem.value) return
+
+  if (
+    currentItem.value?.type === 'chapter' &&
+    readingPercent.value >= 100 &&
+    chapterReadingStatus.value.progress !== 'finished'
+  ) {
+    persistChapterReadingStatus({
+      ...chapterReadingStatus.value,
+      progress: 'finished'
+    })
+  }
+
+  await goToReaderItem(nextReaderItem.value)
+}
+
 const openSelectionChat = async (action, text) => {
   if (!currentToolSubject.value) return
 
@@ -838,8 +855,8 @@ watch(
 }
 
 .reader-main :deep(.source-note-highlight--selection) {
-  background: #eeedfe;
-  border-bottom: 1.5px solid #7f77dd;
+  background: var(--color-selection-soft);
+  border-bottom: 1.5px solid var(--color-selection);
 }
 
 .reader-main :deep(.source-note-highlight--key-step) {
@@ -855,7 +872,7 @@ watch(
 .reader-main :deep(.source-note-highlight--underline) {
   background: transparent;
   text-decoration-line: underline;
-  text-decoration-color: #7f77dd;
+  text-decoration-color: var(--color-selection);
   text-decoration-thickness: 1.5px;
   text-underline-offset: 0.18em;
 }

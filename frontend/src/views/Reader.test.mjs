@@ -35,6 +35,15 @@ assert.match(source, /card\?\.contextScope === 'selection'/, 'selection-only not
 assert.match(source, /fetchReaderContent\(book\.value\.id, \{[\s\S]*?readerType: 'chapter'/, 'chapter notes should load complete chapter Markdown for chat context')
 assert.match(source, /content_translated/, 'chapter note context should prefer the complete translated chapter when available')
 assert.match(source, /action === 'chapter-note'[\s\S]*?createChapterCard/, 'selected text can seed a whole-chapter question without shrinking the context')
+assert.match(source, /@go-next="goToNextReaderItem"/, 'next-page navigation should run the reading completion check')
+assert.match(source, /readingPercent\.value >= 100[\s\S]*?progress: 'finished'[\s\S]*?goToReaderItem\(nextReaderItem\.value\)/, 'a fully read chapter should be marked finished before opening the next item')
+assert.match(source, /source-note-highlight--selection[\s\S]*?var\(--color-selection-soft\)/, 'saved selection highlights should use the same calm blue selection palette')
+
+const globalStyles = readFileSync(resolve(currentDir, '../style.css'), 'utf8')
+const designSystem = readFileSync(resolve(currentDir, '../design-system.css'), 'utf8')
+assert.match(globalStyles, /::selection\s*\{[\s\S]*?var\(--color-selection-soft\)/, 'native text selections should use the dedicated blue selection color')
+assert.match(designSystem, /#app \.selected-text-preview\s*\{[\s\S]*?var\(--color-selection-soft\)/, 'saved text selections should use the dedicated blue selection color')
+assert.match(designSystem, /#app \.question-block\s*\{[\s\S]*?var\(--color-question-soft\)/, 'Note questions should use a quiet neutral surface instead of the brand accent')
 
 const panesSource = readFileSync(resolve(currentDir, '../components/ReaderPanes.vue'), 'utf8')
 assert.match(panesSource, /No chapter guide is available for this chapter yet\./, 'Guide dual pane should keep the missing-guide empty state')

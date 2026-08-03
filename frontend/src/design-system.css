@@ -1774,10 +1774,10 @@
 #app .selected-text-preview {
   padding: 0.75rem 0.9rem;
   border: 0;
-  border-left: 2px solid var(--color-accent);
+  border-left: 2px solid var(--color-selection);
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-  color: var(--color-muted);
-  background: var(--color-accent-soft);
+  color: var(--color-selection-ink);
+  background: var(--color-selection-soft);
   font-family: var(--font-reading);
 }
 
@@ -1818,9 +1818,10 @@
 
 #app .note-card .chat-user {
   margin-left: 1.5rem;
+  border-left: 2px solid var(--color-question-line);
   border-radius: var(--radius-md) var(--radius-md) var(--radius-xs) var(--radius-md);
-  color: var(--color-ink-soft);
-  background: var(--color-accent-soft);
+  color: var(--color-question-ink);
+  background: var(--color-question-soft);
 }
 
 #app .note-card .chat-ai {
@@ -2367,7 +2368,9 @@
 }
 
 #app .selected-preview {
-  border-left-color: var(--color-accent);
+  border-left-color: var(--color-selection);
+  color: var(--color-selection-ink);
+  background: var(--color-selection-soft);
 }
 
 #app .evaluation-block {
@@ -2382,8 +2385,8 @@
 }
 
 #app .conversation-card .chat-user {
-  color: var(--color-accent-dark);
-  background: var(--color-accent-soft);
+  color: var(--color-question-ink);
+  background: var(--color-question-soft);
 }
 
 #app .conversation-card .chat-ai {
@@ -2529,10 +2532,10 @@
 }
 
 #app .question-block {
-  border-left-color: var(--color-accent);
+  border-left-color: var(--color-question-line);
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-  color: var(--color-ink-soft);
-  background: var(--color-accent-soft);
+  color: var(--color-question-ink);
+  background: var(--color-question-soft);
 }
 
 #app .question-context-details {

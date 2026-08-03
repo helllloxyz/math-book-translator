@@ -15,6 +15,12 @@
   --color-accent: #c56547;
   --color-accent-dark: #9d4833;
   --color-accent-soft: #f4ded4;
+  --color-selection: #6f98b4;
+  --color-selection-ink: #18384c;
+  --color-selection-soft: #dceaf3;
+  --color-question-line: #c9c1b5;
+  --color-question-ink: #49443d;
+  --color-question-soft: #f0ede7;
   --color-success: #647c56;
   --color-success-soft: #e5eddf;
   --color-warning: #aa7b35;
@@ -125,8 +131,8 @@ button:active:not(:disabled) {
 }
 
 ::selection {
-  color: var(--color-ink);
-  background: var(--color-accent-soft);
+  color: var(--color-selection-ink);
+  background: var(--color-selection-soft);
 }
 
 #app {
