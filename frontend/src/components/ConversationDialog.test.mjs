@@ -6,10 +6,10 @@ import { dirname, resolve } from 'node:path'
 const currentDir = dirname(fileURLToPath(import.meta.url))
 const component = readFileSync(resolve(currentDir, 'ConversationDialog.vue'), 'utf8')
 
-assert.match(
+assert.doesNotMatch(
   component,
-  /<Teleport\s+to="body"\s+:disabled="standalone">/,
-  'standalone conversations should render inside the page instead of being teleported below the app shell'
+  /<Teleport\b/,
+  'conversation pages should not use Teleport because they render their dialog directly in the route view'
 )
 
 assert.match(component, /class="dialog-status-dot"/, 'dialog header should include a compact status dot')

@@ -1,14 +1,13 @@
 <template>
-  <Teleport to="body" :disabled="standalone">
-    <aside
-      v-if="card"
-      ref="dialogRef"
-      class="conversation-dialog"
-      :class="[modeClass, { standalone }]"
-      role="dialog"
-      aria-modal="false"
-      :aria-label="dialogTitle"
-    >
+  <aside
+    v-if="card"
+    ref="dialogRef"
+    class="conversation-dialog"
+    :class="[modeClass, { standalone }]"
+    role="dialog"
+    aria-modal="false"
+    :aria-label="dialogTitle"
+  >
       <aside v-if="!standalone" class="dialog-context-sidebar" aria-label="Source context">
         <section v-if="metadataFields.length" class="metadata-grid" aria-label="Conversation metadata">
           <div v-for="field in metadataFields" :key="field.label">
@@ -181,8 +180,7 @@
           </form>
         </div>
       </div>
-    </aside>
-  </Teleport>
+  </aside>
 </template>
 
 <script setup>
