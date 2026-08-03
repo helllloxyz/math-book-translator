@@ -2,7 +2,8 @@
   <div v-if="visible" 
        class="context-menu" 
        :style="{ top: y + 'px', left: x + 'px' }">
-    <button type="button" class="menu-item" @click="handleAction('note')">Note</button>
+    <button type="button" class="menu-item" @click="handleAction('chapter-note')">对章节提问</button>
+    <button type="button" class="menu-item" @click="handleAction('selection-note')">仅对选中提问</button>
     <button type="button" class="menu-item" @click="handleAction('latex-repair')">Fix LaTeX</button>
   </div>
 </template>

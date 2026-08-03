@@ -148,7 +148,7 @@ export function useChat() {
                 content: `${currentAssistant.content || ''}${visibleChunk}`
             }
             afterAppend?.()
-        })
+        }, { delayAfterLast: true })
     }
 
     const formatQuizAttemptFeedback = (result) => {

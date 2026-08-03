@@ -120,6 +120,8 @@ export function useLearningCards() {
             sourceTitle: note.source_title || sourceTitle,
             selectedText: note.selected_text || '',
             chapterSummary: note.chapterSummary || '',
+            contextScope: note.contextScope || note.context_scope || (type === 'selection' ? 'selection' : 'chapter'),
+            initialPrompt: note.initialPrompt || note.initial_prompt || '',
             messages,
             noteContent: serializeCardMessages(messages, quizMetadata),
             loading: false,
@@ -145,7 +147,7 @@ export function useLearningCards() {
         return createChapterCard(chapter)
     }
 
-    const createChapterCard = (chapter) => {
+    const createChapterCard = (chapter, options = {}) => {
         const card = toAskCard({
             id: null,
             tempId: `chapter_chat:${chapter.id}:temp:${++tempCardCounter}`,
@@ -154,6 +156,8 @@ export function useLearningCards() {
             note_content: '',
             title: 'New chapter note',
             chapterSummary: chapter.chapterSummary || '',
+            contextScope: 'chapter',
+            initialPrompt: options.initialPrompt || '',
             source_type: chapter.sourceType || chapter.source_type,
             source_id: chapter.sourceId || chapter.source_id,
             source_title: subjectTitle(chapter)
@@ -218,20 +222,27 @@ export function useLearningCards() {
         return card
     }
 
-    const ensureSelectionCard = (chapter, selectedText) => {
+    const ensureSelectionCard = (chapter, selectedText, options = {}) => {
         const normalizedText = selectedText.trim()
         const existing = askCards.value.find(card => (
             card.type === 'selection' &&
             card.sourceId === (chapter.sourceId || chapter.source_id || '') &&
             card.selectedText === normalizedText
         ))
-        if (existing) return existing
+        if (existing) {
+            if (!existing.messages.length && options.initialPrompt) {
+                existing.initialPrompt = options.initialPrompt
+            }
+            return existing
+        }
         const card = toAskCard({
             id: null,
             type: 'selection_chat',
             selected_text: normalizedText,
             note_content: '',
             title: 'New selection note',
+            contextScope: 'selection',
+            initialPrompt: options.initialPrompt || '',
             source_type: chapter.sourceType || chapter.source_type,
             source_id: chapter.sourceId || chapter.source_id,
             source_title: subjectTitle(chapter)

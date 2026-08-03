@@ -31,6 +31,10 @@ assert.match(source, /route\.query\.chapter_id/, 'Reader should react when the c
 assert.match(source, /sidebarOpen/, 'Reader should let the toolbar collapse the table of contents')
 assert.match(source, /focusRouteNote/, 'Reader should restore and highlight a note opened from the Notes page')
 assert.match(source, /route\.query\.note_id/, 'Reader should accept explicit note deep links')
+assert.match(source, /card\?\.contextScope === 'selection'/, 'selection-only notes should send only selected text as chat context')
+assert.match(source, /fetchReaderContent\(book\.value\.id, \{[\s\S]*?readerType: 'chapter'/, 'chapter notes should load complete chapter Markdown for chat context')
+assert.match(source, /content_translated/, 'chapter note context should prefer the complete translated chapter when available')
+assert.match(source, /action === 'chapter-note'[\s\S]*?createChapterCard/, 'selected text can seed a whole-chapter question without shrinking the context')
 
 const panesSource = readFileSync(resolve(currentDir, '../components/ReaderPanes.vue'), 'utf8')
 assert.match(panesSource, /No chapter guide is available for this chapter yet\./, 'Guide dual pane should keep the missing-guide empty state')

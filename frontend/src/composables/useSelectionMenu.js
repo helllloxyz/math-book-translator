@@ -48,12 +48,17 @@ export function useSelectionMenu(viewportRef, onAction) {
 
   const handleKeydown = async (event) => {
     if (!event.ctrlKey || (event.key !== 'q' && event.key !== 'Q')) return
+    if (event.target?.closest('input, textarea, [contenteditable="true"]')) return
 
     const selection = window.getSelection()
     const text = getSelectionText().trim()
-    if (!text || !isSelectionFromReader(selection)) return
-
     event.preventDefault()
+
+    if (!text || !isSelectionFromReader(selection)) {
+      await onAction('chapter-note', '', { contentTarget: 'translated' })
+      return
+    }
+
     selectedText.value = text
     selectedContentTarget.value = getSelectionContentTarget(selection)
     const rect = selection.getRangeAt(0).getBoundingClientRect()

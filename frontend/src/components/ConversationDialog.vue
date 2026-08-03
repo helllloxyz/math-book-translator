@@ -332,6 +332,10 @@ const emptyMessage = computed(() => {
   return 'Ask a question to continue this note.'
 })
 
+const resetDraft = () => {
+  draft.value = messages.value.length ? '' : String(props.card?.initialPrompt || '')
+}
+
 const showEmptyMessage = computed(() => !messages.value.length && !isQuiz.value)
 
 const loadingLabel = computed(() => isQuiz.value ? 'Checking...' : 'Sending...')
@@ -392,7 +396,7 @@ const toggleResponseStyle = (styleId) => {
 }
 
 watch(() => props.card?.id, () => {
-  draft.value = ''
+  resetDraft()
   renderMath()
 })
 watch(() => props.card?.noteContent, renderMath)
@@ -403,6 +407,7 @@ watch(() => props.card?.selected_text, renderMath)
 watch(displayedChapterSummary, renderMath)
 
 onMounted(() => {
+  resetDraft()
   renderMath()
   loadResponseStyles()
   document.addEventListener('copy', handleLatexCopy)

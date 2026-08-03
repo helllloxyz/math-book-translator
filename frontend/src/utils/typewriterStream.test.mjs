@@ -18,6 +18,22 @@ assert.deepEqual(appended, ['abc', 'def', 'ghi'], 'large chunks should be split 
 assert.equal(appended.join(''), 'abcdefghi', 'typewriter updates should preserve the full response')
 assert.deepEqual(waits, [7, 7], 'typewriter should pause between visible updates but not after the last one')
 
+const streamedAppended = []
+const streamedWaits = []
+await appendWithTypewriter(
+  'token',
+  (chunk) => streamedAppended.push(chunk),
+  {
+    chunkSize: 6,
+    intervalMs: 7,
+    delayAfterLast: true,
+    delay: async (ms) => streamedWaits.push(ms)
+  }
+)
+
+assert.deepEqual(streamedAppended, ['token'], 'a short streamed chunk should still be displayed')
+assert.deepEqual(streamedWaits, [7], 'streamed chunks should yield after their final visible update so Vue can paint it')
+
 const emptyAppended = []
 await appendWithTypewriter('', (chunk) => emptyAppended.push(chunk), {
   delay: async () => {

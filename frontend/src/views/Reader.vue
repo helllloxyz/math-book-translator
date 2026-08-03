@@ -161,7 +161,6 @@ const {
   loadAskNotes,
 } = useLearningCards()
 const {
-  buildCardContext,
   createEmptyLearningContext
 } = useChapterLearningContext()
 
@@ -373,9 +372,25 @@ const htmlToText = (html) => {
   return element.textContent?.replace(/\s+/g, ' ').trim() || ''
 }
 
-const buildReaderItemContext = (card) => {
-  if (currentItem.value?.type === 'chapter' && currentChapter.value) {
-    return buildCardContext(card, currentChapter.value, chapterLearning.value)
+const buildReaderItemContext = async (card) => {
+  if (currentChapter.value?.id && book.value?.id) {
+    if (card?.contextScope === 'selection') {
+      return card.selectedText || ''
+    }
+
+    try {
+      const chapterData = await bookStore.fetchReaderContent(book.value.id, {
+        readerType: 'chapter',
+        chapterId: currentChapter.value.id
+      })
+      const translatedContent = chapterData?.content_translated
+      const rawContent = chapterData?.content_raw
+      return typeof translatedContent === 'string' && translatedContent.trim()
+        ? translatedContent
+        : (typeof rawContent === 'string' ? rawContent : '')
+    } catch (error) {
+      console.error('Failed to load full chapter context for note:', error)
+    }
   }
 
   const parts = [
@@ -383,13 +398,13 @@ const buildReaderItemContext = (card) => {
     `Reader item title: ${currentItem.value?.title || ''}`
   ]
 
-  if (card?.type === 'selection') {
+  if (card?.contextScope === 'selection') {
     parts.push('Selected text:', card.selectedText || '')
   }
 
   const visibleText = htmlToText(renderedTarget.value)
   if (visibleText) {
-    parts.push('Visible content:', visibleText.slice(0, 12000))
+    parts.push('Visible content:', visibleText)
   }
 
   return parts.join('\n\n')
@@ -455,15 +470,17 @@ const goToReaderItem = async (item) => {
   await handleItemSelect(item)
 }
 
-const openSelectionChat = async (_action, text) => {
-  if (!currentToolSubject.value || !text.trim()) return
+const openSelectionChat = async (action, text) => {
+  if (!currentToolSubject.value) return
 
   if (viewMode.value !== 'single') {
     viewMode.value = 'single'
     await nextTick()
   }
 
-  const card = ensureSelectionCard(currentToolSubject.value, text)
+  const card = action === 'chapter-note'
+    ? createChapterCard(currentToolSubject.value, { initialPrompt: text })
+    : ensureSelectionCard(currentToolSubject.value, text, { initialPrompt: text })
   await activateNoteCard(card)
 }
 
@@ -549,7 +566,13 @@ const handleSelectionAction = async (action, text, options = {}) => {
     await openLatexRepairDialog(text, options)
     return
   }
-  await openSelectionChat(action, text)
+  if (action === 'chapter-note' && !text.trim()) {
+    await openChapterNote()
+    return
+  }
+  if (action === 'chapter-note' || action === 'selection-note') {
+    await openSelectionChat(action, text)
+  }
 }
 
 const {
@@ -566,10 +589,10 @@ const activateNoteCard = async (card) => {
   if (card?.type === 'selection') {
     await focusSelectionSource(card)
   }
-  if (currentItem.value?.type === 'chapter') {
+  if (currentChapter.value) {
     await ensureChapterLearning(currentChapter.value)
   }
-  openConversationPage(card)
+  await openConversationPage(card)
 }
 
 const openChapterNote = async () => {
@@ -597,7 +620,7 @@ const openQuizDialog = async (options = {}) => {
   await activateNoteCard(card)
 }
 
-const openConversationPage = (card) => {
+const openConversationPage = async (card) => {
   if (!book.value || !currentItem.value || !card) return
 
   const metadata = buildConversationMetadata(book.value, currentItem.value)
@@ -610,10 +633,12 @@ const openConversationPage = (card) => {
     }
   })
 
+  const contextText = await buildReaderItemContext(card)
+
   saveConversationPayload(conversationId, {
     mode: card.type === 'quiz' ? 'quiz' : 'note',
     card,
-    contextText: buildReaderItemContext(card),
+    contextText,
     chapterSummary: chapterLearning.value.summary || '',
     metadata,
     title: buildConversationDocumentTitle(card, metadata)

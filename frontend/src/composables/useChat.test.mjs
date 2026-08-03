@@ -14,6 +14,7 @@ assert.doesNotMatch(source, /prompt_macros|loadPromptMacros|applyPromptMacros/, 
 assert.match(source, /mode:\s*card\.type === 'quiz' \? 'quiz' : 'chat'/, 'card chat should send quiz mode only for quiz cards')
 assert.match(source, /firstMessageNoteContent/, 'note creation should keep the original user message content for persistence')
 assert.match(source, /appendWithTypewriter/, 'stream chunks should be flushed through the frontend typewriter layer')
+assert.match(source, /delayAfterLast:\s*true/, 'every streamed chunk should yield after its final update so small chunks remain visibly animated')
 assert.match(source, /const assistantIndex = messages\.push/, 'streaming should update the assistant message through the reactive messages array')
 assert.match(source, /messages\[assistantIndex\] = \{/, 'stream chunks should replace the assistant array entry to trigger UI updates')
 assert.match(source, /card\.type === 'quiz' && card\.questionId/, 'structured quiz cards should submit answers to the attempts endpoint')

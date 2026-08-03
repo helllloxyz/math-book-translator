@@ -27,6 +27,7 @@ const chapterNote = ensureChapterCard(chapter)
 assert.equal(chapterNote.scopeLabel, '本章')
 assert.equal(chapterNote.questionSummary, 'New chapter note')
 assert.equal(chapterNote.sourceTitle, '21.5 Orientations and Atlases')
+assert.equal(chapterNote.contextScope, 'chapter', 'chapter notes should use the complete chapter as prompt context')
 
 const firstCreatedChapterNote = createChapterCard(chapter)
 const secondCreatedChapterNote = createChapterCard(chapter)
@@ -46,6 +47,10 @@ assert.equal(selectionNote.scopeLabel, '片段')
 assert.equal(selectionNote.questionSummary, 'New selection note')
 assert.equal(selectionNote.sourceTitle, '21.5 Orientations and Atlases')
 assert.equal(selectionNote.selectedText, 'det(∂yʲ / ∂xⁱ) > 0')
+assert.equal(selectionNote.contextScope, 'selection', 'selection-only notes should limit prompt context to the selection')
+
+const chapterNoteFromSelection = createChapterCard(chapter, { initialPrompt: 'What does this orientation condition mean?' })
+assert.equal(chapterNoteFromSelection.initialPrompt, 'What does this orientation condition mean?', 'chapter notes opened from a selection should prefill the composer without narrowing chapter context')
 
 const quizCard = createQuizQuestionCard(chapter, {
   id: 9,
