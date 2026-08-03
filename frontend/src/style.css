@@ -21,6 +21,7 @@
   --color-question-line: #c9c1b5;
   --color-question-ink: #49443d;
   --color-question-soft: #f0ede7;
+  --color-emphasis-mark: rgba(197, 101, 71, 0.2);
   --color-success: #647c56;
   --color-success-soft: #e5eddf;
   --color-warning: #aa7b35;
@@ -206,6 +207,19 @@ button:active:not(:disabled) {
 .latex-content ol {
   margin-top: 0;
   margin-bottom: 1.25em;
+}
+
+.latex-content strong {
+  color: var(--color-ink);
+  font-weight: 700;
+  background: linear-gradient(
+    transparent 68%,
+    var(--color-emphasis-mark) 68%,
+    var(--color-emphasis-mark) 92%,
+    transparent 92%
+  );
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
 }
 
 .latex-content blockquote {

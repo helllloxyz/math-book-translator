@@ -44,6 +44,7 @@ const designSystem = readFileSync(resolve(currentDir, '../design-system.css'), '
 assert.match(globalStyles, /::selection\s*\{[\s\S]*?var\(--color-selection-soft\)/, 'native text selections should use the dedicated blue selection color')
 assert.match(designSystem, /#app \.selected-text-preview\s*\{[\s\S]*?var\(--color-selection-soft\)/, 'saved text selections should use the dedicated blue selection color')
 assert.match(designSystem, /#app \.question-block\s*\{[\s\S]*?var\(--color-question-soft\)/, 'Note questions should use a quiet neutral surface instead of the brand accent')
+assert.match(globalStyles, /\.latex-content strong\s*\{[\s\S]*?font-weight:\s*700;[\s\S]*?var\(--color-emphasis-mark\)/, 'Markdown bold text should have a clearly visible editorial emphasis treatment')
 
 const panesSource = readFileSync(resolve(currentDir, '../components/ReaderPanes.vue'), 'utf8')
 assert.match(panesSource, /No chapter guide is available for this chapter yet\./, 'Guide dual pane should keep the missing-guide empty state')
