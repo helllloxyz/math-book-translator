@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { appendWithTypewriter } from './typewriterStream.js'
+import { appendWithTypewriter, createTypewriterQueue } from './typewriterStream.js'
 
 const appended = []
 const waits = []
@@ -33,6 +33,22 @@ await appendWithTypewriter(
 
 assert.deepEqual(streamedAppended, ['token'], 'a short streamed chunk should still be displayed')
 assert.deepEqual(streamedWaits, [7], 'streamed chunks should yield after their final visible update so Vue can paint it')
+
+const queuedAppended = []
+const queue = createTypewriterQueue(
+  (chunk) => queuedAppended.push(chunk),
+  {
+    chunkSize: 2,
+    intervalMs: 1,
+    delay: async () => {}
+  }
+)
+queue.enqueue('abc')
+queue.enqueue('def')
+await queue.flush()
+
+assert.equal(queuedAppended.join(''), 'abcdef', 'queued stream chunks should retain all response text')
+assert.deepEqual(queuedAppended, ['ab', 'cd', 'ef'], 'queued stream chunks should animate as one response instead of independently flushing each network chunk')
 
 const emptyAppended = []
 await appendWithTypewriter('', (chunk) => emptyAppended.push(chunk), {

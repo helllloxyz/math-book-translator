@@ -1,7 +1,7 @@
 import { ref } from 'vue'
 import { apiClient, buildApiUrl } from '../api/client'
 import { deserializeMessages, serializeMessages } from '../utils/renderer'
-import { appendWithTypewriter } from '../utils/typewriterStream'
+import { createTypewriterQueue } from '../utils/typewriterStream'
 
 const QUIZ_METADATA_KEY = 'quizQuestion'
 
@@ -140,15 +140,27 @@ export function useChat() {
         note.note_content = serializeMessages(note.messages)
     }
 
-    const appendAssistantContent = async (messages, assistantIndex, chunk, afterAppend) => {
-        await appendWithTypewriter(chunk, (visibleChunk) => {
-            const currentAssistant = messages[assistantIndex] || { role: 'assistant', content: '' }
-            messages[assistantIndex] = {
-                ...currentAssistant,
-                content: `${currentAssistant.content || ''}${visibleChunk}`
-            }
-            afterAppend?.()
-        }, { delayAfterLast: true })
+    const appendAssistantContent = (messages, assistantIndex, visibleChunk, afterAppend) => {
+        const currentAssistant = messages[assistantIndex] || { role: 'assistant', content: '' }
+        messages[assistantIndex] = {
+            ...currentAssistant,
+            content: `${currentAssistant.content || ''}${visibleChunk}`
+        }
+        afterAppend?.()
+    }
+
+    const consumeStreamWithTypewriter = async (response, append) => {
+        const reader = response.body.getReader()
+        const decoder = new TextDecoder()
+        const typewriter = createTypewriterQueue(append)
+
+        while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            typewriter.enqueue(decoder.decode(value, { stream: true }))
+        }
+        typewriter.enqueue(decoder.decode())
+        await typewriter.flush()
     }
 
     const formatQuizAttemptFeedback = (result) => {
@@ -252,17 +264,12 @@ export function useChat() {
                 })
             })
             if (!response.ok) throw new Error('Network response was not ok')
-            const reader = response.body.getReader()
-            const decoder = new TextDecoder()
-            while (true) {
-                const { done, value } = await reader.read()
-                if (done) break
-                const chunk = decoder.decode(value, { stream: true })
-                await appendAssistantContent(messages, assistantIndex, chunk, () => {
+            await consumeStreamWithTypewriter(response, (visibleChunk) => {
+                appendAssistantContent(messages, assistantIndex, visibleChunk, () => {
                     syncCardMessages(card)
                     options.onUpdate?.(card)
                 })
-            }
+            })
         } catch (err) {
             const currentAssistant = messages[assistantIndex] || { role: 'assistant', content: '' }
             messages[assistantIndex] = {
@@ -370,17 +377,11 @@ export function useChat() {
 
             if (!response.ok) throw new Error('Network response was not ok')
 
-            const reader = response.body.getReader()
-            const decoder = new TextDecoder()
-
-            while (true) {
-                const { done, value } = await reader.read()
-                if (done) break
-                const chunk = decoder.decode(value, { stream: true })
-                await appendAssistantContent(messages, assistantIndex, chunk, () => {
+            await consumeStreamWithTypewriter(response, (visibleChunk) => {
+                appendAssistantContent(messages, assistantIndex, visibleChunk, () => {
                     syncNoteMessages(note)
                 })
-            }
+            })
         } catch (err) {
             const currentAssistant = messages[assistantIndex] || { role: 'assistant', content: '' }
             messages[assistantIndex] = {
