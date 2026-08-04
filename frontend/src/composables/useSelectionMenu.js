@@ -123,11 +123,6 @@ export function useSelectionMenu(viewportRef, onAction) {
     openSelectionMenu(selection)
   }
 
-  const handleMouseUp = (event) => {
-    if (event.button !== 0 || event.target?.closest('.context-menu')) return
-    window.requestAnimationFrame(() => openSelectionMenu(window.getSelection()))
-  }
-
   const handleCopy = (event) => {
     const selection = window.getSelection()
     if (!isSelectionFromReader(selection)) return
@@ -160,14 +155,12 @@ export function useSelectionMenu(viewportRef, onAction) {
 
   onMounted(() => {
     document.addEventListener('keydown', handleKeydown)
-    document.addEventListener('mouseup', handleMouseUp)
     document.addEventListener('click', handleDocumentClick)
     document.addEventListener('copy', handleCopy)
   })
 
   onUnmounted(() => {
     document.removeEventListener('keydown', handleKeydown)
-    document.removeEventListener('mouseup', handleMouseUp)
     document.removeEventListener('click', handleDocumentClick)
     document.removeEventListener('copy', handleCopy)
   })
