@@ -38,6 +38,11 @@ assert.match(source, /action === 'chapter-note'[\s\S]*?createChapterCard/, 'sele
 assert.match(source, /@go-next="goToNextReaderItem"/, 'next-page navigation should run the reading completion check')
 assert.match(source, /readingPercent\.value >= 100[\s\S]*?progress: 'finished'[\s\S]*?goToReaderItem\(nextReaderItem\.value\)/, 'a fully read chapter should be marked finished before opening the next item')
 assert.match(source, /source-note-highlight--selection[\s\S]*?var\(--color-selection-soft\)/, 'saved selection highlights should use the same calm blue selection palette')
+assert.match(source, /bookStore\.createAnnotation/, 'reader annotations should be persisted through the book store')
+assert.match(source, /notes\.filter\(\(note\) => note\.type === 'annotation'\)/, 'reader should restore saved annotations from source notes')
+assert.match(source, /renderRevision\.value === 0/, 'annotations should wait until Markdown and math rendering have completed')
+assert.match(source, /reader-annotation--highlight[\s\S]*?rgba\(247, 218, 92, 0\.48\)/, 'traditional highlights should use a restrained yellow treatment')
+assert.match(source, /reader-annotation--underline[\s\S]*?text-decoration-line:\s*underline/, 'traditional underline annotations should render as underlined text')
 
 const globalStyles = readFileSync(resolve(currentDir, '../style.css'), 'utf8')
 const designSystem = readFileSync(resolve(currentDir, '../design-system.css'), 'utf8')

@@ -15,6 +15,8 @@
         <div class="text-column">
           <div
             class="markdown-body latex-content"
+            data-content-target="translated"
+            data-annotation-eligible="true"
             :key="`single-${currentItem.id}`"
             v-html="renderedTarget"
           ></div>
@@ -47,6 +49,8 @@
       <div ref="leftPaneRef" class="pane source-pane" @scroll="syncPaneScroll('left', $event)">
         <div
           class="markdown-body latex-content"
+          :data-content-target="leftContentTarget"
+          :data-annotation-eligible="leftAnnotationEligible ? 'true' : 'false'"
           :key="leftPaneKey"
           v-html="leftPaneHtml"
         ></div>
@@ -61,6 +65,8 @@
           v-else
           class="markdown-body latex-content"
           :class="{ 'guide-content': isGuideDual }"
+          :data-content-target="rightContentTarget"
+          :data-annotation-eligible="rightAnnotationEligible ? 'true' : 'false'"
           :key="rightPaneKey"
           v-html="rightPaneHtml"
         ></div>
@@ -170,6 +176,11 @@ const rightPaneHtml = computed(() => {
 const guideUnavailable = computed(() => {
   return isGuideDual.value && !String(rightPaneHtml.value || '').trim()
 })
+
+const leftAnnotationEligible = computed(() => !isGuideDual.value || !isSelectedGuideDual.value)
+const rightAnnotationEligible = computed(() => !isGuideDual.value || isSelectedGuideDual.value)
+const leftContentTarget = computed(() => effectiveViewMode.value === 'dual' ? 'raw' : 'translated')
+const rightContentTarget = computed(() => 'translated')
 
 const emitScrollProgress = (element) => {
   if (!element) return

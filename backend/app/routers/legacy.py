@@ -165,7 +165,10 @@ async def get_book_notes(book_id: int, db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(UserNote)
         .outerjoin(Chapter, UserNote.chapter_id == Chapter.id)
-        .where(or_(UserNote.book_id == book_id, Chapter.book_id == book_id))
+        .where(
+            or_(UserNote.book_id == book_id, Chapter.book_id == book_id),
+            or_(UserNote.type.is_(None), UserNote.type != NoteType.annotation),
+        )
         .order_by(UserNote.created_at.desc())
     )
     return result.scalars().all()

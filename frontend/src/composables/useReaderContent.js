@@ -7,6 +7,7 @@ export function useReaderContent(bookStore, book, viewportRef) {
   const loading = ref(false)
   const renderedSource = ref('')
   const renderedTarget = ref('')
+  const renderRevision = ref(0)
   const activeRequestId = ref(0)
 
   const resetContentState = () => {
@@ -28,13 +29,14 @@ export function useReaderContent(bookStore, book, viewportRef) {
     if (requestId !== activeRequestId.value) return
 
     const mermaidNodes = viewportRef.value.querySelectorAll('.mermaid')
-    if (!mermaidNodes.length) return
-
-    try {
-      await mermaid.run({ nodes: mermaidNodes })
-    } catch (error) {
-      console.error('Failed to render Mermaid diagrams:', error)
+    if (mermaidNodes.length) {
+      try {
+        await mermaid.run({ nodes: mermaidNodes })
+      } catch (error) {
+        console.error('Failed to render Mermaid diagrams:', error)
+      }
     }
+    if (requestId === activeRequestId.value) renderRevision.value += 1
   }
 
   const scheduleViewportRender = (requestId) => {
@@ -46,6 +48,7 @@ export function useReaderContent(bookStore, book, viewportRef) {
   }
 
   const renderCurrentViewport = () => {
+    renderRevision.value = 0
     scheduleViewportRender(activeRequestId.value)
   }
 
@@ -177,6 +180,7 @@ export function useReaderContent(bookStore, book, viewportRef) {
   const loadItem = async (item) => {
     const requestId = activeRequestId.value + 1
     activeRequestId.value = requestId
+    renderRevision.value = 0
 
     resetContentState()
 
@@ -217,6 +221,7 @@ export function useReaderContent(bookStore, book, viewportRef) {
     loading,
     renderedSource,
     renderedTarget,
+    renderRevision,
     loadItem,
     renderCurrentViewport
   }

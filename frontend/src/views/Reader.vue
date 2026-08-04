@@ -65,9 +65,17 @@
       :x="menuX"
       :y="menuY"
       :selection="selectedText"
+      :active-annotation-id="activeAnnotationId"
+      :annotation-allowed="annotationAllowed"
       @action="handleMenuAction"
       @close="closeMenu"
     />
+
+    <Transition name="annotation-feedback">
+      <div v-if="annotationFeedback" class="annotation-feedback" role="status" aria-live="polite">
+        {{ annotationFeedback }}
+      </div>
+    </Transition>
 
     <div v-if="latexRepair.visible" class="latex-repair-backdrop" @click.self="closeLatexRepairDialog">
       <section class="latex-repair-dialog" role="dialog" aria-modal="true" aria-labelledby="latex-repair-title">
@@ -120,7 +128,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, ref, onMounted, watch } from 'vue'
+import { computed, nextTick, ref, onBeforeUnmount, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useBookStore } from '../stores/bookStore'
 import { useChapterLearningContext } from '../composables/useChapterLearningContext'
@@ -135,6 +143,7 @@ import {
 import { findAdjacentReaderLeaves, findChapterGuideLeaf } from '../utils/readerTree'
 import { buildReaderItemQuery, findReaderLeafByRouteQuery } from '../utils/readerRoute'
 import { renderMarkdown, renderMath } from '../utils/renderer'
+import { applyReaderAnnotations } from '../utils/readerAnnotations'
 import {
   buildConversationDocumentTitle,
   buildConversationMetadata,
@@ -177,6 +186,9 @@ const guideTree = ref([])
 const renderedGuide = ref('')
 const guideLoading = ref(false)
 const guideRequestId = ref(0)
+const readerAnnotations = ref([])
+const annotationFeedback = ref('')
+let annotationFeedbackTimer = null
 const latexPreviewRef = ref(null)
 const latexRepair = ref({
   visible: false,
@@ -196,6 +208,7 @@ const {
   loading,
   renderedSource,
   renderedTarget,
+  renderRevision,
   loadItem,
   renderCurrentViewport
 } = useReaderContent(bookStore, book, viewportRef)
@@ -240,6 +253,7 @@ const setViewMode = (mode) => {
   if (!canUseChapterContent.value) return
   if (!['single', 'dual', 'guide-dual'].includes(mode)) return
   viewMode.value = mode
+  nextTick(() => renderCurrentViewport())
 }
 
 const resetGuidePane = () => {
@@ -413,6 +427,7 @@ const buildReaderItemContext = async (card) => {
 const resetToolCards = async (item) => {
   const subject = currentToolSubject.value
   if (!item || !subject) {
+    readerAnnotations.value = []
     loadAskNotes([], { id: 'none', title_zh: '', title_en: '' })
     return
   }
@@ -425,6 +440,7 @@ const resetToolCards = async (item) => {
       notes = []
     }
   }
+  readerAnnotations.value = notes.filter((note) => note.type === 'annotation')
   loadAskNotes(notes, subject)
   chapterLearning.value = createEmptyLearningContext()
   learningContextChapterId.value = null
@@ -452,6 +468,7 @@ const loadItemFromRouteQuery = async () => {
 
 const handleItemSelect = async (item, options = {}) => {
   closeMenu()
+  readerAnnotations.value = []
   readingPercent.value = 0
   if (item?.type !== 'chapter') {
     viewMode.value = 'single'
@@ -579,6 +596,23 @@ const confirmLatexRepair = async () => {
 }
 
 const handleSelectionAction = async (action, text, options = {}) => {
+  if (action === 'annotation-highlight' || action === 'annotation-underline') {
+    await createReaderAnnotation(
+      action === 'annotation-underline' ? 'underline' : 'highlight',
+      text,
+      options
+    )
+    return
+  }
+  if (action === 'annotation-remove') {
+    await removeReaderAnnotation(options.annotationId)
+    return
+  }
+  if (action === 'annotation-note') {
+    const annotation = readerAnnotations.value.find((note) => note.id === options.annotationId)
+    await openSelectionChat('selection-note', annotation?.selected_text || text)
+    return
+  }
   if (action === 'latex-repair') {
     await openLatexRepairDialog(text, options)
     return
@@ -593,6 +627,8 @@ const handleSelectionAction = async (action, text, options = {}) => {
 }
 
 const {
+  activeAnnotationId,
+  annotationAllowed,
   closeMenu,
   handleMenuAction,
   menuVisible,
@@ -600,6 +636,59 @@ const {
   menuY,
   selectedText
 } = useSelectionMenu(viewportRef, handleSelectionAction)
+
+const showAnnotationFeedback = (message) => {
+  if (annotationFeedbackTimer) window.clearTimeout(annotationFeedbackTimer)
+  annotationFeedback.value = message
+  annotationFeedbackTimer = window.setTimeout(() => {
+    annotationFeedback.value = ''
+    annotationFeedbackTimer = null
+  }, 3200)
+}
+
+const applySavedAnnotations = async () => {
+  await nextTick()
+  if (!viewportRef.value || renderRevision.value === 0) return
+  applyReaderAnnotations(viewportRef.value, readerAnnotations.value)
+}
+
+const createReaderAnnotation = async (style, fallbackText, options = {}) => {
+  const subject = currentToolSubject.value
+  const selectedText = options.anchorText || fallbackText
+  if (!subject || !selectedText.trim()) return
+
+  try {
+    const annotation = await bookStore.createAnnotation({
+      bookId: subject.bookId,
+      chapterId: subject.chapterId,
+      sourceType: subject.sourceType,
+      sourceId: subject.sourceId,
+      sourceTitle: subject.sourceTitle,
+      selectedText,
+      startIndex: options.startIndex || 0,
+      contentTarget: options.contentTarget || 'translated',
+      style
+    })
+    readerAnnotations.value = [...readerAnnotations.value, annotation]
+    window.getSelection()?.removeAllRanges()
+    await applySavedAnnotations()
+  } catch (error) {
+    console.error('Failed to save reader annotation:', error)
+    showAnnotationFeedback('标注保存失败，请重试')
+  }
+}
+
+const removeReaderAnnotation = async (annotationId) => {
+  if (!annotationId) return
+  try {
+    await bookStore.deleteNote(annotationId)
+    readerAnnotations.value = readerAnnotations.value.filter((note) => note.id !== annotationId)
+    await applySavedAnnotations()
+  } catch (error) {
+    console.error('Failed to remove reader annotation:', error)
+    showAnnotationFeedback('标注删除失败，请重试')
+  }
+}
 
 const activateNoteCard = async (card) => {
   activateAskCard(card)
@@ -798,6 +887,10 @@ onMounted(async () => {
   }
 })
 
+onBeforeUnmount(() => {
+  if (annotationFeedbackTimer) window.clearTimeout(annotationFeedbackTimer)
+})
+
 watch(
   () => [
     viewMode.value,
@@ -806,6 +899,13 @@ watch(
   ],
   () => {
     loadCurrentChapterGuide()
+  }
+)
+
+watch(
+  () => [renderRevision.value, readerAnnotations.value, viewMode.value],
+  () => {
+    window.requestAnimationFrame(() => applySavedAnnotations())
   }
 )
 
@@ -875,6 +975,63 @@ watch(
   text-decoration-color: var(--color-selection);
   text-decoration-thickness: 1.5px;
   text-underline-offset: 0.18em;
+}
+
+.reader-main :deep(.reader-annotation) {
+  margin: 0;
+  padding: 0;
+  border-radius: 2px;
+  color: inherit;
+  cursor: pointer;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  transition: background-color 160ms ease, text-decoration-color 160ms ease;
+}
+
+.reader-main :deep(.reader-annotation--highlight) {
+  background: rgba(247, 218, 92, 0.48);
+}
+
+.reader-main :deep(.reader-annotation--highlight:hover) {
+  background: rgba(244, 207, 48, 0.66);
+}
+
+.reader-main :deep(.reader-annotation--underline) {
+  background: transparent;
+  text-decoration-line: underline;
+  text-decoration-color: #a1772c;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 0.18em;
+}
+
+.reader-main :deep(.reader-annotation--underline:hover) {
+  text-decoration-color: #6f4c14;
+}
+
+.annotation-feedback {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 1100;
+  padding: 10px 13px;
+  border: 1px solid #e2c6be;
+  border-radius: 8px;
+  background: #fff7f3;
+  color: #8c352c;
+  box-shadow: 0 10px 26px rgba(79, 48, 39, 0.14);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.annotation-feedback-enter-active,
+.annotation-feedback-leave-active {
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.annotation-feedback-enter-from,
+.annotation-feedback-leave-to {
+  opacity: 0;
+  transform: translateY(6px);
 }
 
 .latex-repair-backdrop {

@@ -235,6 +235,31 @@ export const useBookStore = defineStore('book', {
         throw err
       }
     },
+    async createAnnotation(annotation = {}) {
+      try {
+        const response = await apiClient.post('/notes', {
+          book_id: annotation.bookId || annotation.book_id,
+          chapter_id: annotation.chapterId || annotation.chapter_id || null,
+          source_type: annotation.sourceType || annotation.source_type,
+          source_id: annotation.sourceId || annotation.source_id,
+          source_title: annotation.sourceTitle || annotation.source_title || '',
+          selected_text: annotation.selectedText || annotation.selected_text || '',
+          start_index: Number.isFinite(annotation.startIndex)
+            ? annotation.startIndex
+            : (annotation.start_index || 0),
+          note_content: JSON.stringify({
+            style: annotation.style === 'underline' ? 'underline' : 'highlight',
+            content_target: annotation.contentTarget || annotation.content_target || 'translated'
+          }),
+          title: null,
+          type: 'annotation'
+        })
+        return response.data
+      } catch (err) {
+        this.error = err.response?.data?.detail || err.message
+        throw err
+      }
+    },
     async generateTopDownGuides(bookId) {
       try {
         const response = await apiClient.post(`/books/${bookId}/guides/top-down`)

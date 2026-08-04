@@ -34,6 +34,7 @@ class NoteType(enum.Enum):
     chapter_chat = "chapter_chat"
     selection_chat = "selection_chat"
     quiz_chat = "quiz_chat"
+    annotation = "annotation"
 
 # --- SQLAlchemy Models ---
 
@@ -192,7 +193,7 @@ class CreateNoteRequest(BaseModel):
     start_index: int = 0
     note_content: str
     title: Optional[str] = None
-    type: str # "translation", "explanation", "custom_note"
+    type: str  # NoteType value, including chat, quiz, and reader annotation records.
 
 class ImportBookRequest(BaseModel):
     file_path: str
