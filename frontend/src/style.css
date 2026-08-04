@@ -258,10 +258,30 @@ button:active:not(:disabled) {
 }
 
 .latex-content .katex-display {
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow: visible;
   margin: 1.75rem 0;
   padding: 0.35rem 0;
+}
+
+/*
+ * KaTeX keeps display formulas on one line by default.  A book's source often
+ * supplies its own alignment rows, but translated Markdown can legitimately
+ * contain a long single display expression.  Let KaTeX's top-level atoms wrap
+ * in that case so the Chinese reading pane remains as readable as the source
+ * pane instead of exposing a horizontal scrollbar.
+ */
+.latex-content .katex-display > .katex {
+  max-width: 100%;
+  white-space: normal;
+}
+
+.latex-content .katex-display > .katex > .katex-html {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  row-gap: 0.25em;
+  max-width: 100%;
 }
 
 @media (prefers-reduced-motion: reduce) {

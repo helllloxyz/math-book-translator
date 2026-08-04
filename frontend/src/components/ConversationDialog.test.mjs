@@ -31,6 +31,7 @@ assert.match(
   'question context should render before the empty conversation state'
 )
 assert.match(component, /<summary>Question context<\/summary>/, 'question context should be collapsible')
+assert.match(component, /class="question-context-content" v-html="renderMessage\(selectedText\)"/, 'question context should pass selected Markdown through the KaTeX-capable renderer')
 assert.doesNotMatch(component, /Type your answer to start this quiz dialogue\./, 'quiz dialogues should not show the old empty prompt scaffold')
 assert.match(component, /showEmptyMessage/, 'empty state visibility should be explicit so quiz can suppress the scaffold')
 assert.doesNotMatch(component, /v-if="standalone && isQuiz" class="quiz-context standalone-context-card"/, 'standalone quiz conversations should not render the old quiz context card above the dialogue')

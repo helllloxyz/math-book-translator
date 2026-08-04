@@ -112,7 +112,7 @@
               open
             >
               <summary>Question context</summary>
-              <p>{{ selectedText }}</p>
+              <div class="question-context-content" v-html="renderMessage(selectedText)"></div>
             </details>
             <p v-if="showEmptyMessage" class="empty-message">{{ emptyMessage }}</p>
             <template v-else>
@@ -842,6 +842,10 @@ onUnmounted(() => {
 
 .question-block p,
 .question-block :deep(p) {
+  margin: 0;
+}
+
+.question-context-content :deep(p) {
   margin: 0;
 }
 

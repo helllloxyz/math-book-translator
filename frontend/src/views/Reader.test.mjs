@@ -50,6 +50,7 @@ assert.match(globalStyles, /::selection\s*\{[\s\S]*?var\(--color-selection-soft\
 assert.match(designSystem, /#app \.selected-text-preview\s*\{[\s\S]*?var\(--color-selection-soft\)/, 'saved text selections should use the dedicated blue selection color')
 assert.match(designSystem, /#app \.question-block\s*\{[\s\S]*?var\(--color-question-soft\)/, 'Note questions should use a quiet neutral surface instead of the brand accent')
 assert.match(globalStyles, /\.latex-content strong\s*\{[\s\S]*?font-weight:\s*700;[\s\S]*?var\(--color-emphasis-mark\)/, 'Markdown bold text should have a clearly visible editorial emphasis treatment')
+assert.match(globalStyles, /\.latex-content \.katex-display > \.katex > \.katex-html\s*\{[\s\S]*?display:\s*flex;[\s\S]*?flex-wrap:\s*wrap;/, 'long display formulas should wrap inside the reading column instead of requiring horizontal scrolling')
 
 const panesSource = readFileSync(resolve(currentDir, '../components/ReaderPanes.vue'), 'utf8')
 assert.match(panesSource, /No chapter guide is available for this chapter yet\./, 'Guide dual pane should keep the missing-guide empty state')
