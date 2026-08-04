@@ -463,6 +463,13 @@ const updateCredentialDraftFromForm = (providerId = selectedProviderId.value) =>
   const provider = providerForId(providerId)
   if (!provider) return
   const existing = credentialForProviderId(providerId)
+  const normalizedApiKey = apiKey.value.trim()
+  if (!existing && !normalizedApiKey) {
+    const nextDrafts = { ...credentialDrafts.value }
+    delete nextDrafts[providerId]
+    credentialDrafts.value = nextDrafts
+    return
+  }
   const model = resolvedModel.value || existing?.default_model || provider.default_model
   credentialDrafts.value = {
     ...credentialDrafts.value,
@@ -474,7 +481,7 @@ const updateCredentialDraftFromForm = (providerId = selectedProviderId.value) =>
       default_model: model,
       models: model ? Array.from(new Set([model, ...(provider.models || [])])) : provider.models || [],
       headers: {},
-      ...(apiKey.value ? { api_key: apiKey.value } : {})
+      ...(normalizedApiKey ? { api_key: normalizedApiKey } : {})
     }
   }
 }
@@ -506,10 +513,11 @@ const hydrateProviderForm = (profile = null) => {
     return
   }
   const credential = credentialForProvider.value
-  apiKey.value = ''
-  baseUrl.value = credential?.base_url || provider.default_base_url || ''
+  const draft = credentialDrafts.value[provider.provider_id]
+  apiKey.value = draft?.api_key || ''
+  baseUrl.value = draft?.base_url || credential?.base_url || provider.default_base_url || ''
   const profileMatchesProvider = !profile?.provider_id || profile.provider_id === provider.provider_id
-  selectModel((profileMatchesProvider && profile?.model) || credential?.default_model || provider.default_model)
+  selectModel((profileMatchesProvider && profile?.model) || draft?.default_model || credential?.default_model || provider.default_model)
 }
 
 watch(selectedProviderId, (_nextProviderId, previousProviderId) => {
@@ -540,7 +548,8 @@ onMounted(async () => {
       storagePath: data.storage_path || 'storage'
     }
     const defaultProviderId = profiles.default?.provider_id
-    selectedProviderId.value = credentialForProviderId(defaultProviderId) ? defaultProviderId : providerIdFromCredential(credentials.value[0]) || defaultProviderId || ''
+    const configuredDefaultProviderId = credentialForProviderId(defaultProviderId) ? defaultProviderId : ''
+    selectedProviderId.value = configuredDefaultProviderId || providerIdFromCredential(credentials.value[0]) || ''
     activeProviderEntryId.value = entryIdForProviderId(selectedProviderId.value)
     if (selectedProviderId.value) {
       hydrateProviderForm(profiles.default)
@@ -563,32 +572,33 @@ const saveSettings = async () => {
   isSaving.value = true
   try {
     const provider = selectedProvider.value
-    if (!provider) {
-      formError.value = '请先选择一个 LLM 服务商。'
-      return
+    if (provider) {
+      const model = resolvedModel.value
+      if (!model) {
+        formError.value = '请选择或输入模型名称。'
+        return
+      }
+      if (!credentialForProviderId(provider.provider_id) && !apiKey.value.trim()) {
+        formError.value = `${provider.label} 需要填写 API Key。`
+        return
+      }
+      updateCredentialDraftFromForm()
     }
-    const model = resolvedModel.value
-    if (!model) {
-      formError.value = '请选择或输入模型名称。'
-      return
-    }
-    updateCredentialDraftFromForm()
     const nextTaskProfiles = buildTaskProfilesFromSelections()
-    if (!nextTaskProfiles.default) {
+    if (configuredModelProfiles.value.length && !nextTaskProfiles.default) {
       formError.value = '请先为默认任务选择一个模型。'
       return
     }
 
-    for (const draft of Object.values(credentialDrafts.value)) {
+    const draftsToSave = Object.values(credentialDrafts.value).filter((draft) => {
+      return credentialForProviderId(draft.provider_id) || draft.api_key?.trim()
+    })
+    for (const draft of draftsToSave) {
       const existing = credentialForProviderId(draft.provider_id)
       let response
       if (existing) {
         response = await apiClient.put(`/credentials/${existing.credential_id}`, draft)
       } else {
-        if (!draft.api_key) {
-          formError.value = `${draft.provider_id} 需要填写 API Key。`
-          return
-        }
         response = await apiClient.post('/credentials', draft)
       }
       credentials.value = upsertCredentialSummary(credentials.value, response.data.credential)

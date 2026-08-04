@@ -9,6 +9,7 @@ from app.main import create_app
 from app.models.schema import SettingsRequest
 from app.services.book_service import BookService
 from app.services.book_storage import BookStorage
+from app.services.llm_credentials import CredentialRecord, FileCredentialRegistry
 from app.services.settings_service import SettingsService
 
 
@@ -121,6 +122,18 @@ def test_book_storage_static_helper_uses_storage_root_when_available(tmp_path, m
 @pytest.mark.asyncio
 async def test_update_settings_strips_legacy_secret_fields(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        FileCredentialRegistry,
+        "list",
+        lambda _self: [
+            CredentialRecord(
+                credential_id="openai",
+                provider_id="openai",
+                provider_type="openai_compatible",
+                api_key="configured",
+            )
+        ],
+    )
     (tmp_path / SettingsService.SETTINGS_FILE).write_text(
         json.dumps(
             {
@@ -147,6 +160,32 @@ async def test_update_settings_strips_legacy_secret_fields(tmp_path, monkeypatch
     assert "providers" not in saved
     assert "api_keys" not in saved
     assert saved["llm_profile"]["credential_id"] == "openai"
+
+
+def test_get_current_settings_hides_profiles_without_configured_credentials(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(FileCredentialRegistry, "list", lambda _self: [])
+    (tmp_path / SettingsService.SETTINGS_FILE).write_text(
+        json.dumps(
+            {
+                "storage_path": "storage",
+                "llm_profiles": {
+                    "default": {
+                        "provider_id": "gemini",
+                        "provider_type": "gemini",
+                        "credential_id": "gemini",
+                        "model": "gemini-3-flash-preview",
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    settings = SettingsService.get_current_settings()
+
+    assert settings["llm_profile"] == {}
+    assert settings["llm_profiles"] == {}
 
 
 def test_cors_disables_credentials_when_wildcard_origin(monkeypatch):

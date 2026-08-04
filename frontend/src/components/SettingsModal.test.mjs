@@ -21,7 +21,12 @@ assert.match(source, /if \(!configuredProviderIds\.has\(provider\.provider_id\)\
 assert.match(source, /availableProfileKeys\.has\(selections\.default\)/, 'stale default profile selections should reset when the configured provider changes')
 assert.match(source, /credentials\.value = upsertCredentialSummary/, 'saving a credential should immediately update configured provider state')
 assert.match(source, /const defaultProviderId = profiles\.default\?\.provider_id/, 'loading settings should validate the saved default provider before selecting it')
-assert.match(source, /credentialForProviderId\(defaultProviderId\) \? defaultProviderId : providerIdFromCredential/, 'stale defaults should fall back to the first configured credential in the provider form')
+assert.match(source, /credentialForProviderId\(defaultProviderId\) \? defaultProviderId : ''/, 'an unconfigured saved default should not select a provider')
+assert.match(source, /configuredDefaultProviderId \|\| providerIdFromCredential\(credentials\.value\[0\]\) \|\| ''/, 'the provider form should only fall back to a configured credential')
+assert.match(source, /if \(!existing && !normalizedApiKey\)/, 'an unconfigured provider without a key should not leave a credential draft')
+assert.match(source, /const draftsToSave = Object\.values\(credentialDrafts\.value\)\.filter/, 'saving should filter out empty unconfigured drafts')
+assert.match(source, /apiKey\.value = draft\?\.api_key \|\| ''/, 'switching providers should preserve a real unsaved key draft')
+assert.match(source, /if \(configuredModelProfiles\.value\.length && !nextTaskProfiles\.default\)/, 'empty credentials should allow empty default settings')
 assert.match(source, /formError/, 'settings validation should render inline errors')
 assert.doesNotMatch(source, /\balert\s*\(/, 'settings should not use blocking browser alerts')
 

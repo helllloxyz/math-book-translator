@@ -1,7 +1,9 @@
 import os
 import json
 import logging
+
 from app.models.schema import SettingsRequest
+from app.services.llm_credentials import FileCredentialRegistry
 
 logger = logging.getLogger("app.settings")
 
@@ -43,13 +45,16 @@ class SettingsService:
                 os.environ["STORAGE_DIR"] = settings.storage_path
 
             if settings.llm_profile is not None:
-                existing["llm_profile"] = settings.llm_profile.model_dump(exclude_none=True)
+                existing["llm_profile"] = SettingsService._sanitize_profile(
+                    settings.llm_profile.model_dump(exclude_none=True)
+                )
 
             if settings.llm_profiles is not None:
-                existing["llm_profiles"] = {
+                requested_profiles = {
                     task: profile.model_dump(exclude_none=True)
                     for task, profile in settings.llm_profiles.items()
                 }
+                existing["llm_profiles"] = SettingsService._sanitize_profiles(requested_profiles)
                 existing.pop("llm_profile", None)
 
             # Do not persist or expose legacy secret-bearing settings.
@@ -82,7 +87,44 @@ class SettingsService:
     def _public_settings(settings: dict):
         public = {
             "storage_path": settings.get("storage_path", os.getenv("STORAGE_DIR", "storage")),
-            "llm_profile": settings.get("llm_profile", {}),
-            "llm_profiles": settings.get("llm_profiles", {}),
+            "llm_profile": SettingsService._sanitize_profile(settings.get("llm_profile", {})),
+            "llm_profiles": SettingsService._sanitize_profiles(settings.get("llm_profiles", {})),
         }
         return public
+
+    @staticmethod
+    def _configured_credential_keys() -> set[str]:
+        keys = set()
+        for credential in FileCredentialRegistry().list():
+            if not credential.api_key.strip():
+                continue
+            keys.add(credential.credential_id)
+            if credential.provider_id:
+                keys.add(credential.provider_id)
+        return keys
+
+    @staticmethod
+    def _sanitize_profile(profile: dict) -> dict:
+        if not isinstance(profile, dict) or not profile:
+            return {}
+        configured_keys = SettingsService._configured_credential_keys()
+        credential_id = str(profile.get("credential_id") or "").strip()
+        provider_id = str(profile.get("provider_id") or "").strip()
+        if credential_id not in configured_keys and provider_id not in configured_keys:
+            return {}
+        return dict(profile)
+
+    @staticmethod
+    def _sanitize_profiles(profiles: dict) -> dict:
+        if not isinstance(profiles, dict):
+            return {}
+        configured_keys = SettingsService._configured_credential_keys()
+        sanitized = {}
+        for task, profile in profiles.items():
+            if not isinstance(profile, dict) or not profile:
+                continue
+            credential_id = str(profile.get("credential_id") or "").strip()
+            provider_id = str(profile.get("provider_id") or "").strip()
+            if credential_id in configured_keys or provider_id in configured_keys:
+                sanitized[task] = dict(profile)
+        return sanitized
