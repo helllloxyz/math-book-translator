@@ -24,7 +24,7 @@ assert.doesNotMatch(source, /addEventListener\('(mouse|pointer)up'/, 'reader sel
 assert.doesNotMatch(source, /addEventListener\('selectionchange'/, 'selection changes should wait for the explicit Ctrl+Q command')
 assert.match(source, /selectionAnchorForRoot/, 'selection menu should capture a stable text offset for persisted annotations')
 assert.match(source, /data-reader-annotation-id/, 'clicking an existing annotation should reopen its management action')
-assert.match(source, /below \+ 52 <= window\.innerHeight/, 'selection menu should flip above selections near the viewport bottom')
+assert.match(source, /below \+ menuHeight <= window\.innerHeight/, 'selection menu should account for the full menu height near the viewport bottom')
 assert.match(source, /closest\('\.mermaid, svg'\)/, 'SVG diagram text should not be wrapped in HTML annotation marks')
 assert.match(source, /onAction\('chapter-note', '', \{ contentTarget: 'translated' \}\)/, 'Ctrl+Q without a selection should open a whole-chapter question')
 assert.match(contextMenu, /handleAction\('chapter-note'\).*章节提问/, 'selection menu should offer a whole-chapter question mode')
@@ -33,5 +33,7 @@ assert.match(contextMenu, /handleAction\('annotation-highlight'\)/, 'selection m
 assert.match(contextMenu, /handleAction\('annotation-underline'\)/, 'selection menu should offer an underline action')
 assert.match(contextMenu, /handleAction\('annotation-remove'\)/, 'existing annotations should be removable from the same menu')
 assert.match(contextMenu, /handleAction\('annotation-note'\)/, 'existing annotations should be usable as the source for a written note')
+assert.match(contextMenu, /flex-direction:\s*column/, 'selection actions should be shown as a visible vertical list instead of a clipped horizontal row')
+assert.match(contextMenu, /overflow-y:\s*auto/, 'selection actions should remain reachable in a short viewport')
 
 console.log('selection menu LaTeX copy behavior ok')

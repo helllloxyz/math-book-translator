@@ -1,7 +1,7 @@
 <template>
   <div
     v-if="visible"
-    class="context-menu"
+    class="context-menu selection-context-menu"
     :class="{ 'annotation-menu': activeAnnotationId }"
     :style="{ top: y + 'px', left: x + 'px' }"
     role="toolbar"
@@ -60,21 +60,25 @@ const handleAction = (type) => {
 .context-menu {
   position: fixed;
   display: flex;
-  align-items: center;
+  width: min(196px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+  flex-direction: column;
+  align-items: stretch;
   gap: 2px;
-  max-width: calc(100vw - 24px);
   padding: 5px;
   border: 1px solid #d8d0c4;
   border-radius: 9px;
   background: #fffdf8;
   box-shadow: 0 10px 28px rgba(54, 45, 32, 0.16), 0 2px 6px rgba(54, 45, 32, 0.08);
   z-index: 1000;
-  overflow-x: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   color: #3d372f;
 }
 
 .menu-item {
   display: inline-flex;
+  width: 100%;
   flex: 0 0 auto;
   align-items: center;
   gap: 6px;
@@ -134,9 +138,9 @@ const handleAction = (type) => {
 }
 
 .menu-divider {
-  width: 1px;
-  height: 22px;
-  margin: 0 3px;
+  width: auto;
+  height: 1px;
+  margin: 3px 6px;
   background: #ddd5c9;
 }
 

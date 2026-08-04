@@ -56,14 +56,14 @@ export function useSelectionMenu(viewportRef, onAction) {
   }
 
   const menuLeftForRect = (rect) => {
-    const maximumLeft = Math.max(12, window.innerWidth - 500)
+    const maximumLeft = Math.max(12, window.innerWidth - 208)
     return Math.max(12, Math.min(rect.left, maximumLeft))
   }
 
-  const menuTopForRect = (rect) => {
+  const menuTopForRect = (rect, menuHeight = 220) => {
     const below = rect.bottom + 10
-    if (below + 52 <= window.innerHeight) return Math.max(12, below)
-    return Math.max(12, rect.top - 52)
+    if (below + menuHeight <= window.innerHeight - 12) return Math.max(12, below)
+    return Math.max(12, rect.top - menuHeight - 10)
   }
 
   const openSelectionMenu = (selection) => {
@@ -88,7 +88,7 @@ export function useSelectionMenu(viewportRef, onAction) {
     activeAnnotationId.value = null
     const rect = range.getBoundingClientRect()
     menuX.value = menuLeftForRect(rect)
-    menuY.value = menuTopForRect(rect)
+    menuY.value = menuTopForRect(rect, annotationAllowed.value ? 220 : 126)
     menuVisible.value = true
     return true
   }
@@ -142,7 +142,7 @@ export function useSelectionMenu(viewportRef, onAction) {
       selectedContentTarget.value = annotation.dataset.contentTarget || 'translated'
       annotationAllowed.value = true
       menuX.value = menuLeftForRect(rect)
-      menuY.value = menuTopForRect(rect)
+      menuY.value = menuTopForRect(rect, 92)
       menuVisible.value = true
       return
     }
