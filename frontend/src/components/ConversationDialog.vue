@@ -361,12 +361,12 @@ const handleLatexCopy = (event) => {
 const submitPrompt = () => {
   const prompt = draft.value.trim()
   if (!prompt || props.card?.loading) return
+  draft.value = ''
   emit('send', {
     prompt,
     responseStyleId: selectedResponseStyle.value?.id || '',
     responseStylePrompt: selectedResponseStyle.value?.prompt || ''
   })
-  draft.value = ''
 }
 
 const normalizeResponseStyles = (rawStyles) => {

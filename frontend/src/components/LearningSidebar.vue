@@ -142,8 +142,8 @@ const quizConversationCards = computed(() => {
 const sendDraft = () => {
   const prompt = draft.value.trim()
   if (!prompt || inputDisabled.value) return
-  emit('send', prompt)
   draft.value = ''
+  emit('send', prompt)
 }
 </script>
 

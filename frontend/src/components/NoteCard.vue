@@ -69,8 +69,9 @@ const toggleCollapse = () => {
 
 const sendChat = () => {
     if (!inputPrompt.value.trim()) return
-    emit('chat', inputPrompt.value)
+    const prompt = inputPrompt.value.trim()
     inputPrompt.value = ''
+    emit('chat', prompt)
 }
 
 const renderedContent = computed(() => {

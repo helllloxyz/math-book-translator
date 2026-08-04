@@ -48,6 +48,11 @@ assert.match(component, /copySelectionAsLatex/, 'dialog copy should preserve ren
 assert.match(component, /document\.addEventListener\('copy', handleLatexCopy\)/, 'dialog should intercept copy events while mounted')
 assert.match(component, /document\.removeEventListener\('copy', handleLatexCopy\)/, 'dialog should clean up the copy listener')
 assert.match(component, /@keydown\.enter\.exact\.prevent="submitPrompt"/, 'enter should submit follow-up prompts from the dialog textarea')
+assert.match(
+  component,
+  /if \(!prompt \|\| props\.card\?\.loading\) return\s+draft\.value = ''\s+emit\('send'/,
+  'accepted prompts should clear the composer before the send handler can trigger a loading render'
+)
 assert.match(component, /props\.card\?\.initialPrompt/, 'a selected passage should be able to prefill the question composer')
 assert.match(component, /messages\.value\.length \? '' : String\(props\.card\?\.initialPrompt \|\| ''\)/, 'prefill should only apply to a new conversation, not overwrite a saved follow-up')
 assert.match(component, /min-height:\s*calc\(2em \+ 16px\)/, 'input textarea should default to two lines of text height')
