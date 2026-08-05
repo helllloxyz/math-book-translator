@@ -36,6 +36,8 @@ assert.doesNotMatch(component, /Type your answer to start this quiz dialogue\./,
 assert.match(component, /showEmptyMessage/, 'empty state visibility should be explicit so quiz can suppress the scaffold')
 assert.doesNotMatch(component, /v-if="standalone && isQuiz" class="quiz-context standalone-context-card"/, 'standalone quiz conversations should not render the old quiz context card above the dialogue')
 assert.match(component, /Array\.isArray\(props\.card\.messages\)\) return props\.card\.messages/, 'dialog should consume live message arrays so follow-up streams render without refresh')
+assert.doesNotMatch(component, /renderKatexMath|renderMathInElement/, 'dialog must not mutate the Vue-managed message list with KaTeX auto-rendering')
+assert.match(component, /const syncMessageScroll = \(\) =>/, 'stream updates should only synchronize scrolling after Vue renders')
 assert.match(component, /class="dialog-toolbar"/, 'input footer should expose academic tool pills')
 assert.match(component, /v-for="style in responseStyles"/, 'response style buttons should be loaded from configuration')
 assert.match(component, /buildApiUrl\('\/config\/conversation-styles\.json'\)/, 'dialog should load editable root config response styles through the API')

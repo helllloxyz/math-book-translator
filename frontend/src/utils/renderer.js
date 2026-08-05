@@ -4,6 +4,7 @@ import mermaid from 'mermaid'
 import 'katex/dist/katex.min.css'
 import renderMathInElement from 'katex/dist/contrib/auto-render'
 import { buildApiUrl } from '../api/client'
+import { normalizeMathDelimiters } from './mathDelimiters'
 export { deserializeMessages, serializeMessages } from './chatMessages.js'
 
 mermaid.initialize({
@@ -28,14 +29,6 @@ md.renderer.rules.fence = (tokens, idx, options, env, self) => {
         return `<pre class="mermaid">${encoded}</pre>`
     }
     return defaultFence(tokens, idx, options, env, self)
-}
-
-const normalizeMathDelimiters = (content = '') => {
-    return content
-        .replace(/(^|[^\\])\\\(/g, '$1\\\\(')
-        .replace(/(^|[^\\])\\\)/g, '$1\\\\)')
-        .replace(/(^|[^\\])\\\[/g, '$1\\\\[')
-        .replace(/(^|[^\\])\\\]/g, '$1\\\\]')
 }
 
 export const renderMarkdown = (content, book) => {

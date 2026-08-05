@@ -36,7 +36,7 @@
 
         <section v-if="isChapterNote && displayedChapterSummary" class="chapter-context">
           <h3>Chapter context</h3>
-          <div ref="chapterSummaryRef" class="latex-content" v-html="renderMessage(displayedChapterSummary)"></div>
+          <div class="latex-content" v-html="renderMessage(displayedChapterSummary)"></div>
         </section>
 
       </aside>
@@ -102,12 +102,11 @@
           <section ref="messagesRef" class="message-list latex-content" :class="{ empty: !messages.length && !selectedText }">
             <section v-if="standalone && isChapterNote && displayedChapterSummary" class="chapter-context standalone-context-card">
               <h3>Chapter context</h3>
-              <div ref="chapterSummaryRef" class="latex-content" v-html="renderMessage(displayedChapterSummary)"></div>
+              <div class="latex-content" v-html="renderMessage(displayedChapterSummary)"></div>
             </section>
 
             <details
               v-if="isSelectionNote && selectedText"
-              ref="selectedTextRef"
               class="question-block latex-content question-context-details"
               open
             >
@@ -187,7 +186,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { buildApiUrl } from '../api/client'
 import { copySelectionAsLatex } from '../utils/latexCopy'
-import { deserializeMessages, renderMarkdown, renderMath as renderKatexMath } from '../utils/renderer'
+import { deserializeMessages, renderMarkdown } from '../utils/renderer'
 
 const DEFAULT_RESPONSE_STYLES = [
   {
@@ -239,8 +238,6 @@ const emit = defineEmits(['close', 'send', 'go-source', 'delete'])
 const draft = ref('')
 const dialogRef = ref(null)
 const messagesRef = ref(null)
-const selectedTextRef = ref(null)
-const chapterSummaryRef = ref(null)
 const responseStyles = ref(DEFAULT_RESPONSE_STYLES)
 const selectedResponseStyleId = ref('')
 
@@ -342,12 +339,8 @@ const loadingLabel = computed(() => isQuiz.value ? 'Checking...' : 'Sending...')
 
 const renderMessage = (messageContent) => renderMarkdown(messageContent)
 
-const renderMath = () => {
+const syncMessageScroll = () => {
   nextTick(() => {
-    ;[messagesRef.value, selectedTextRef.value, chapterSummaryRef.value]
-      .filter(Boolean)
-      .forEach((element) => renderKatexMath(element))
-
     if (messagesRef.value && props.card?.loading) {
       messagesRef.value.scrollTop = messagesRef.value.scrollHeight
     }
@@ -397,18 +390,15 @@ const toggleResponseStyle = (styleId) => {
 
 watch(() => props.card?.id, () => {
   resetDraft()
-  renderMath()
+  syncMessageScroll()
 })
-watch(() => props.card?.noteContent, renderMath)
-watch(() => props.card?.note_content, renderMath)
-watch(() => props.card?.messages, renderMath, { deep: true })
-watch(() => props.card?.selectedText, renderMath)
-watch(() => props.card?.selected_text, renderMath)
-watch(displayedChapterSummary, renderMath)
+watch(() => props.card?.noteContent, syncMessageScroll)
+watch(() => props.card?.note_content, syncMessageScroll)
+watch(() => props.card?.messages, syncMessageScroll, { deep: true })
 
 onMounted(() => {
   resetDraft()
-  renderMath()
+  syncMessageScroll()
   loadResponseStyles()
   document.addEventListener('copy', handleLatexCopy)
 })
