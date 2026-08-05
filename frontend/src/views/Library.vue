@@ -108,6 +108,9 @@
               <router-link :to="{ name: 'notes', params: { id: book.id }}" class="menu-item menu-link" role="menuitem" @click="closeMenus">
                 查看笔记
               </router-link>
+              <router-link :to="{ name: 'book-management', params: { id: book.id }}" class="menu-item menu-link" role="menuitem" @click="closeMenus">
+                状态与管理
+              </router-link>
               <button class="menu-item book-quiz-btn" role="menuitem" title="Book Quiz" @click="startBookQuiz(book); closeMenus()">
                 Book Quiz
               </button>

@@ -7,6 +7,7 @@ import pytest
 from fastapi import HTTPException, UploadFile
 
 from app.services.book_service import BookService
+from app.services.book_storage import BookStorage
 from app.services.translator import LLMConfigurationError
 
 
@@ -280,6 +281,32 @@ class FailingTranslator(SlowTranslator):
     async def translate_text(self, text):
         self.calls.append(text)
         raise RuntimeError("provider down")
+
+
+@pytest.mark.asyncio
+async def test_force_retranslation_replaces_existing_translation_only_after_success(tmp_path, monkeypatch):
+    monkeypatch.setenv("STORAGE_DIR", str(tmp_path))
+    async def no_sleep(_seconds):
+        return None
+    monkeypatch.setattr(asyncio, "sleep", no_sleep)
+    book = FakeBook()
+    chapter = FakeChapter("1")
+    raw_path = BookStorage.raw_chapter_path(book.uuid, chapter.chapter_index)
+    translated_path = BookStorage.translated_chapter_path(book.uuid, chapter.chapter_index)
+    raw_path.parent.mkdir(parents=True, exist_ok=True)
+    translated_path.parent.mkdir(parents=True, exist_ok=True)
+    raw_path.write_text("new source", encoding="utf-8")
+    translated_path.write_text("old translation", encoding="utf-8")
+
+    failed = await BookService._translate_one_chapter(book, chapter, FailingTranslator(), force=True)
+
+    assert failed is False
+    assert translated_path.read_text(encoding="utf-8") == "old translation"
+
+    succeeded = await BookService._translate_one_chapter(book, chapter, SlowTranslator(), force=True)
+
+    assert succeeded is True
+    assert translated_path.read_text(encoding="utf-8") == "ZH:new source"
 
 
 class MissingConfigTranslator(SlowTranslator):

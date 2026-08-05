@@ -33,6 +33,7 @@ assert.match(source, /学习画像已更新/, 'Library should show a compact lea
 assert.match(source, /selectBookQuizTarget/, 'Book Quiz should call the target selection API')
 assert.match(source, /shouldOfferTranslation/, 'Library should hide translation actions when the book state no longer allows them')
 assert.match(source, /生成 \/ 重新生成导读/, 'translated books should expose a guide regeneration action')
+assert.match(source, /name: 'book-management'/, 'each library book should link to its management workspace')
 assert.match(source, /bookStore\.generateBookGuides\(book\.id\)/, 'guide regeneration should reuse the background translated-book workflow')
 assert.match(storeSource, /async generateBookGuides\(id\)/, 'book store should expose background guide generation for existing books')
 assert.match(source, /openBookMenuId/, 'Library should group secondary book actions in a discoverable menu')

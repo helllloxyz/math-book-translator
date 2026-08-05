@@ -33,6 +33,16 @@ export const useBookStore = defineStore('book', {
         this.loading = false
       }
     },
+    async fetchBookManagement(id) {
+      try {
+        const response = await apiClient.get(`/books/${id}/management`)
+        return response.data
+      } catch (err) {
+        const message = err.response?.data?.detail || err.message
+        this.error = message
+        throw new Error(message)
+      }
+    },
     async uploadBook(file, options = {}) {
         const formData = new FormData();
         formData.append('file', file);
@@ -126,6 +136,18 @@ export const useBookStore = defineStore('book', {
         // Optimistically update status or fetch book details
         const book = this.books.find(b => b.id === id)
         if (book) book.status = 'translating'
+      } catch (err) {
+        const message = err.response?.data?.detail || err.message
+        this.error = message
+        throw new Error(message)
+      }
+    },
+    async retranslateChapter(bookId, chapterId) {
+      try {
+        const response = await apiClient.post(`/books/${bookId}/chapters/${chapterId}/retranslate`)
+        const book = this.books.find(item => item.id === Number(bookId))
+        if (book) book.status = 'translating'
+        return response.data
       } catch (err) {
         const message = err.response?.data?.detail || err.message
         this.error = message

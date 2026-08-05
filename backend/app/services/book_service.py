@@ -633,10 +633,10 @@ class BookService:
         return plan
 
     @staticmethod
-    async def _translate_one_chapter(book, chapter, translator) -> bool:
+    async def _translate_one_chapter(book, chapter, translator, *, force: bool = False) -> bool:
         raw_path = BookStorage.raw_chapter_path(book.uuid, chapter.chapter_index)
         trans_path = BookStorage.translated_chapter_path(book.uuid, chapter.chapter_index)
-        if trans_path.exists() and trans_path.stat().st_size > 0:
+        if not force and trans_path.exists() and trans_path.stat().st_size > 0:
             return True
         if not raw_path.exists():
             return False
@@ -667,7 +667,7 @@ class BookService:
         if not translated_text:
             return False
 
-        if trans_path.exists() and trans_path.stat().st_size > 0:
+        if not force and trans_path.exists() and trans_path.stat().st_size > 0:
             return True
 
         trans_path.parent.mkdir(parents=True, exist_ok=True)
@@ -675,6 +675,54 @@ class BookService:
         temp_path.write_text(translated_text, encoding="utf-8")
         temp_path.replace(trans_path)
         return True
+
+    @staticmethod
+    async def process_chapter_retranslation(book_id: int, chapter_id: int) -> None:
+        """Atomically replace one translation while keeping the prior file on failure."""
+        lock = BookService._translation_locks.setdefault(book_id, asyncio.Lock())
+        if lock.locked():
+            logger.info("Translation task already running for Book ID: %s", book_id)
+            return
+
+        async with lock:
+            async with SessionLocal() as session:
+                book = await session.scalar(select(Book).where(Book.id == book_id))
+                chapter = await session.scalar(
+                    select(Chapter).where(Chapter.id == chapter_id, Chapter.book_id == book_id)
+                )
+                if not book or not chapter:
+                    return
+                previous_status = book.status
+                try:
+                    TranslatorService.require_configured(task="translation")
+                    book.status = BookStatus.translating
+                    await session.commit()
+                    success = await BookService._translate_one_chapter(
+                        book,
+                        chapter,
+                        TranslatorService(task="translation"),
+                        force=True,
+                    )
+                    # Relationships are not eagerly loaded in background sessions, so query explicitly.
+                    chapters = list(
+                        (
+                            await session.execute(
+                                select(Chapter).where(Chapter.book_id == book_id).order_by(Chapter.order)
+                            )
+                        ).scalars().all()
+                    )
+                    plan = await BookService.build_translation_plan(book, chapters)
+                    book.translation_total = plan.total
+                    book.translation_completed = plan.completed
+                    book.translation_failed = 0 if success else 1
+                    book.status = BookStatus.translated if success and plan.completed == plan.total else BookStatus.failed
+                    await session.commit()
+                except Exception:
+                    logger.exception(
+                        "Chapter retranslation failed book=%s chapter=%s", book_id, chapter_id
+                    )
+                    book.status = BookStatus.failed if previous_status != BookStatus.loaded else previous_status
+                    await session.commit()
 
     @staticmethod
     async def translate_pending_chapters(

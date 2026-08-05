@@ -11,10 +11,11 @@ from sqlalchemy.orm import selectinload
 from app.models.base import get_db
 from app.models.schema import Book, BookStatus, Chapter, ImportBookRequest, RenameBookRequest, UserNote
 from app.services.book_service import BookService
+from app.services.book_management_service import BookManagementService
 from app.services.book_storage import BookStorage
 from app.services.guide_service import GuideService
 from app.services.reader_tree_service import ReaderTreeService
-from app.services.translator import LLMConfigurationError
+from app.services.translator import LLMConfigurationError, TranslatorService
 
 router = APIRouter()
 
@@ -102,6 +103,14 @@ async def get_book(book_id: int, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Book not found")
     book.chapters.sort(key=lambda chapter: chapter.order)
     return book
+
+
+@router.get("/books/{book_id}/management")
+async def get_book_management(book_id: int, db: AsyncSession = Depends(get_db)):
+    snapshot = await BookManagementService.snapshot(book_id, db)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="Book not found")
+    return snapshot
 
 
 @router.get("/books/{book_id}/reader-tree")
@@ -236,7 +245,7 @@ async def trigger_translation(book_id: int, background_tasks: BackgroundTasks, d
     book = result.scalar_one_or_none()
     if not book:
         raise HTTPException(status_code=404, detail="Book not found")
-    if book.status in (BookStatus.translating, BookStatus.generating_guides):
+    if book.status in (BookStatus.translating, BookStatus.generating, BookStatus.generating_guides):
         return {"message": "Translation already running"}
     chapters_result = await db.execute(select(Chapter).where(Chapter.book_id == book_id).order_by(Chapter.order))
     chapters = chapters_result.scalars().all()
@@ -246,3 +255,30 @@ async def trigger_translation(book_id: int, background_tasks: BackgroundTasks, d
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     background_tasks.add_task(BookService.process_book_translation, book_id)
     return {"message": "Translation started"}
+
+
+@router.post("/books/{book_id}/chapters/{chapter_id}/retranslate")
+async def retranslate_chapter(
+    book_id: int,
+    chapter_id: int,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
+    book = await db.scalar(select(Book).where(Book.id == book_id))
+    if not book:
+        raise HTTPException(status_code=404, detail="Book not found")
+    if book.status in (BookStatus.translating, BookStatus.generating, BookStatus.generating_guides):
+        raise HTTPException(status_code=409, detail="Book processing is already running")
+    chapter = await db.scalar(
+        select(Chapter).where(Chapter.id == chapter_id, Chapter.book_id == book_id)
+    )
+    if not chapter:
+        raise HTTPException(status_code=404, detail="Chapter not found")
+    if not BookStorage.raw_chapter_path(book.uuid, chapter.chapter_index).exists():
+        raise HTTPException(status_code=400, detail="Chapter source is missing")
+    try:
+        TranslatorService.require_configured(task="translation")
+    except LLMConfigurationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    background_tasks.add_task(BookService.process_chapter_retranslation, book_id, chapter_id)
+    return {"message": "Chapter retranslation started", "chapter_id": chapter_id}
