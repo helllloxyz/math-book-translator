@@ -7,6 +7,7 @@ nohup.out
 storage/*
 backend/storage/*
 backend/config/llm_credentials.json
+backend/settings.json
 project_spec.md
 .superpowers/
 .worktrees/
