@@ -14,7 +14,7 @@
           <section class="storage-strip">
             <div class="field-heading">
               <label>Default Storage Path</label>
-              <small>Server-side book, translation, learning, and guide files.</small>
+              <small>Server-side book, translation, guide, and reader files.</small>
             </div>
             <input
               type="text"

@@ -125,13 +125,8 @@
         "id": "generation",
         "title": "生成与编译",
         "label": "Generation & Compilation",
-        "description": "Shared model for chapter context and book-level reading guide generation.",
+        "description": "Model for reading guide generation directly from chapter bodies.",
         "items": [
-          {
-            "id": "learning_context",
-            "label": "Learning Context",
-            "description": "Per-chapter learning context compilation."
-          },
           {
             "id": "guides",
             "label": "Reading Guides",

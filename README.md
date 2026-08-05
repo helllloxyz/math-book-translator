@@ -9,15 +9,15 @@ The current product focuses on five workflows:
 1. Import Markdown math books from local files.
 2. Translate chapters with an LLM while preserving math notation.
 3. Read source and translated chapters in a dedicated reader.
-4. Compile per-chapter structured learning context (summary, concepts, key theorems, dependencies).
-5. Compile book-level top-down guides from chapter learning context.
+4. Generate concise chapter, directory, and book guides directly from chapter bodies.
+5. Ask questions and use Chapter/Book Quiz to explain concepts, theorem meaning, proof strategy, and concept connections in natural language.
 
 ## Core User Flow
 
 1. Import a Markdown book.
 2. Start translation.
 3. Open chapters in Reader mode.
-4. Ask chapter or selection questions with learning context.
+4. Ask chapter or selection questions grounded in the source text.
 5. Generate and read top-down guides.
 
 ## Run Locally

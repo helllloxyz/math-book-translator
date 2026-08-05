@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.base import get_db
 from app.models.schema import Book, Chapter
 from app.services.guide_service import GuideService
-from app.services.translator import TranslatorService
+from app.services.translator import LLMConfigurationError, TranslatorService
 
 router = APIRouter()
 
@@ -45,5 +45,12 @@ async def generate_top_down_guides(book_id: int, db: AsyncSession = Depends(get_
         select(Chapter).where(Chapter.book_id == book_id).order_by(Chapter.order)
     )
     chapters = chapters_result.scalars().all()
-    guides = await GuideService.generate_top_down_guides(book, chapters, TranslatorService(task="guides"))
+    try:
+        guides = await GuideService.generate_top_down_guides(
+            book, chapters, TranslatorService(task="guides")
+        )
+    except LLMConfigurationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     return {"guides": guides}

@@ -1,3 +1,4 @@
+> 历史说明：本文记录的是移除 Learning Context 之前的 prompt 审计快照。当前实现以章节正文为唯一事实源；Guide、Chat 与 Quiz 不再读取或生成持久化的 Learning Context。请以 `ARCHITECTURE.md` 为准。
 
  总入口
   所有真实 LLM 请求基本都收敛到 backend/app/services/translator.py:94：

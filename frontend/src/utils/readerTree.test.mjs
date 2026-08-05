@@ -45,14 +45,6 @@ const tree = [
             scope_id: '1.1',
             source_type: 'chapter_guide',
             source_id: 'guide:chapter:1.1:map'
-          },
-          {
-            id: 'learning:2',
-            kind: 'leaf',
-            type: 'learning',
-            title: 'c 1.1',
-            source_type: 'chapter_learning',
-            source_id: 'learning:2'
           }
         ]
       }
@@ -62,19 +54,18 @@ const tree = [
 
 const leaves = flattenReaderLeaves(tree)
 
-assert.equal(leaves.length, 4)
+assert.equal(leaves.length, 3)
 assert.deepEqual(
   leaves.map((leaf) => ({ id: leaf.id, depth: leaf.depth, parentTitles: leaf.parentTitles })),
   [
     { id: 'chapter:1', depth: 1, parentTitles: ['Chapter 1'] },
     { id: 'guide:directory-1_1-overview.md', depth: 2, parentTitles: ['Chapter 1', 'c 1.1'] },
-    { id: 'guide:chapter-1_1-map.md', depth: 2, parentTitles: ['Chapter 1', 'c 1.1'] },
-    { id: 'learning:2', depth: 2, parentTitles: ['Chapter 1', 'c 1.1'] }
+    { id: 'guide:chapter-1_1-map.md', depth: 2, parentTitles: ['Chapter 1', 'c 1.1'] }
   ]
 )
 
-assert.equal(findReaderLeaf(tree, 'learning:2')?.source_id, 'learning:2')
-assert.equal(findReaderLeafBySource(tree, 'chapter_learning', 'learning:2')?.id, 'learning:2')
+assert.equal(findReaderLeaf(tree, 'guide:chapter-1_1-map.md')?.source_id, 'guide:chapter:1.1:map')
+assert.equal(findReaderLeafBySource(tree, 'chapter_guide', 'guide:chapter:1.1:map')?.id, 'guide:chapter-1_1-map.md')
 assert.equal(findChapterGuideLeaf(tree, '1.1')?.id, 'guide:chapter-1_1-map.md')
 assert.equal(findChapterGuideLeaf(tree, '1.2'), null)
 assert.equal(
@@ -83,38 +74,20 @@ assert.equal(
   'directory guide should be the fallback when a chapter guide is not present'
 )
 assert.equal(
-  findChapterGuideLeaf([
-    {
-      id: 'dir:1.2',
-      kind: 'directory',
-      title: 'c 1.2',
-      children: [
-        {
-          id: 'learning:3',
-          kind: 'leaf',
-          type: 'learning',
-          title: 'c 1.2',
-          chapter_id: 3,
-          chapter_index: '1.2',
-          source_type: 'chapter_learning',
-          source_id: 'learning:3'
-        }
-      ]
-    }
-  ], '1.2')?.id,
-  'learning:3',
-  'chapter learning should be the fallback when no generated guide is present'
+  findChapterGuideLeaf([], '1.2'),
+  null,
+  'missing generated guides should remain an explicit empty state'
 )
 assert.equal(findReaderLeaf(tree, 'missing'), null)
-assert.equal(findReaderLeafBySource(tree, 'chapter_learning', 'missing'), null)
+assert.equal(findReaderLeafBySource(tree, 'chapter_guide', 'missing'), null)
 assert.deepEqual(
   findAdjacentReaderLeaves(tree, 'chapter:1'),
   { previous: null, next: leaves[1] },
   'first leaf should link forward only'
 )
 assert.deepEqual(
-  findAdjacentReaderLeaves(tree, 'learning:2'),
-  { previous: leaves[2], next: null },
+  findAdjacentReaderLeaves(tree, 'guide:chapter-1_1-map.md'),
+  { previous: leaves[1], next: null },
   'last leaf should link backward only'
 )
 assert.deepEqual(

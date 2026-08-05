@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from app.services.guide_compiler_service import GuideCompilerService
@@ -72,16 +74,24 @@ def test_extract_guides_json_fallback_scans_for_first_guides_object():
 def test_build_chapter_guide_prompt_uses_only_one_chapter_context_and_output_budgets():
     prompt = GuideCompilerService.build_chapter_guide_prompt(
         book_title="Differential Forms",
-        chapter_context={"chapter_index": "1", "title": "Forms", "summary": "Forms summary", "concepts": []},
+        chapter_context={
+            "chapter_index": "1",
+            "title": "Forms",
+            "body_language": "translated",
+            "body": "Forms are alternating multilinear tools for integration.",
+        },
     )
 
     assert "Differential Forms" in prompt
-    assert "Forms summary" in prompt
+    assert "Forms are alternating multilinear tools for integration." in prompt
     assert "Stokes summary" not in prompt
     assert "chapter-level guides" in prompt
     assert f"At most {GuideCompilerService.MAX_CHAPTER_GUIDES_PER_CHAPTER} chapter guide" in prompt
-    assert f"markdown at most {GuideCompilerService.MAX_GUIDE_MARKDOWN_CHARS} characters" in prompt
-    assert f"Mermaid diagrams at most {GuideCompilerService.MAX_MERMAID_NODES} nodes" in prompt
+    assert f"markdown at most {GuideCompilerService.MAX_CHAPTER_GUIDE_MARKDOWN_CHARS} characters" in prompt
+    assert "# 读前 60 秒" in prompt
+    assert "## 带着这些问题读" in prompt
+    assert "Do not create a concept glossary" in prompt
+    assert "Do not use Mermaid diagrams" in prompt
 
 
 def test_build_book_guide_prompt_uses_chapter_guide_summaries_not_learning_contexts():
@@ -103,7 +113,7 @@ def test_build_book_guide_prompt_uses_chapter_guide_summaries_not_learning_conte
     assert "top_level_child_guide_inputs" in prompt
     assert "learning contexts" not in prompt.lower()
     assert f"At most {GuideCompilerService.MAX_BOOK_GUIDES} book guide" in prompt
-    assert f"markdown at most {GuideCompilerService.MAX_GUIDE_MARKDOWN_CHARS} characters" in prompt
+    assert f"markdown at most {GuideCompilerService.MAX_BOOK_GUIDE_MARKDOWN_CHARS} characters" in prompt
 
 
 def test_build_directory_guide_prompt_uses_direct_child_guide_summaries():
@@ -125,6 +135,31 @@ def test_build_directory_guide_prompt_uses_direct_child_guide_summaries():
     assert "Tangent spaces child summary." in prompt
     assert "direct_child_guide_inputs" in prompt
     assert f"At most {GuideCompilerService.MAX_DIRECTORY_GUIDES_PER_DIRECTORY} directory guide" in prompt
+
+
+def test_normalize_guides_hard_limits_chapter_markdown_at_line_boundary():
+    long_markdown = "# 读前 60 秒\n" + "\n".join(
+        f"- 阅读提示 {index}: " + ("内容" * 80)
+        for index in range(20)
+    )
+
+    [guide] = GuideCompilerService.normalize_guides(
+        {
+            "guides": [
+                {
+                    "slug": "preview",
+                    "title": "导读：读前 60 秒",
+                    "scope_type": "chapter",
+                    "scope_id": "4.1",
+                    "markdown": long_markdown,
+                }
+            ]
+        }
+    )
+
+    assert len(guide["markdown"]) <= GuideCompilerService.MAX_CHAPTER_GUIDE_MARKDOWN_CHARS
+    assert guide["markdown"].startswith("# 读前 60 秒")
+    assert not guide["markdown"].endswith("内")
 
 
 @pytest.mark.asyncio
@@ -161,35 +196,82 @@ async def test_write_guides_persists_markdown_files(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_complete_guides_retries_invalid_model_output(monkeypatch):
+    calls = 0
+
+    async def no_sleep(_seconds):
+        return None
+
+    class RetryingTranslator:
+        async def complete(self, user_prompt: str, system_prompt: str, temperature: float = 0.3) -> str:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                return "not json"
+            return '{"guides": [{"slug": "preview", "title": "Guide", "markdown": "# Guide"}]}'
+
+    monkeypatch.setattr("app.services.guide_compiler_service.asyncio.sleep", no_sleep)
+
+    guides = await GuideCompilerService._complete_guides(RetryingTranslator(), "prompt", "system")
+
+    assert calls == 2
+    assert guides[0]["title"] == "Guide"
+
+
+@pytest.mark.asyncio
+async def test_generation_checkpoints_chapter_guide_before_later_failure(tmp_path, monkeypatch):
+    monkeypatch.setenv("STORAGE_DIR", str(tmp_path))
+    translated = tmp_path / "book-uuid" / "book_trans_md" / "1_trans_zh.md"
+    translated.parent.mkdir(parents=True)
+    translated.write_text("Direct chapter body.", encoding="utf-8")
+
+    async def no_sleep(_seconds):
+        return None
+
+    class Book:
+        uuid = "book-uuid"
+        title = "Checkpoint Book"
+
+    class Chapter:
+        chapter_index = "1"
+        title_zh = None
+        title_en = "Chapter One"
+        order = 1
+
+    class FailingBookGuideTranslator:
+        async def complete(self, user_prompt: str, system_prompt: str, temperature: float = 0.3) -> str:
+            if "chapter-level guides" in user_prompt:
+                return (
+                    '{"guides": [{"slug": "preview", "title": "Chapter Guide", '
+                    '"summary": "Chapter summary.", "markdown": "# Chapter Guide"}]}'
+                )
+            return "invalid book guide"
+
+    monkeypatch.setattr("app.services.guide_compiler_service.asyncio.sleep", no_sleep)
+
+    with pytest.raises(ValueError, match="Guide generation failed"):
+        await GuideCompilerService.generate_top_down_guides(
+            Book(), [Chapter()], FailingBookGuideTranslator()
+        )
+
+    chapter_path = tmp_path / "book-uuid" / "book_guides" / "chapter-1-preview.md"
+    manifest_path = tmp_path / "book-uuid" / "book_guides" / "guides.json"
+    assert chapter_path.read_text(encoding="utf-8") == "# Chapter Guide"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert [item["title"] for item in manifest] == ["Chapter Guide"]
+
+
+@pytest.mark.asyncio
 async def test_generate_top_down_guides_rolls_up_directory_nodes_bottom_up(tmp_path, monkeypatch):
     monkeypatch.setenv("STORAGE_DIR", str(tmp_path))
-    learning_dir = tmp_path / "book-uuid" / "book_learning"
-    learning_dir.mkdir(parents=True)
+    translated_dir = tmp_path / "book-uuid" / "book_trans_md"
+    translated_dir.mkdir(parents=True)
     for stem, summary in {
         "1_1_1": "Leaf 1.1.1 summary.",
         "1_1_2": "Leaf 1.1.2 summary.",
         "1_2": "Leaf 1.2 summary.",
     }.items():
-        (learning_dir / f"{stem}.md").write_text(
-            "\n".join(
-                [
-                    "# Chapter Learning Context",
-                    "",
-                    "## Summary",
-                    summary,
-                    "",
-                    "## Concepts",
-                    "- None",
-                    "",
-                    "## Key Theorems",
-                    "- None",
-                    "",
-                    "## Dependencies",
-                    "- None",
-                ]
-            ),
-            encoding="utf-8",
-        )
+        (translated_dir / f"{stem}_trans_zh.md").write_text(summary, encoding="utf-8")
 
     class Book:
         uuid = "book-uuid"
@@ -277,47 +359,13 @@ async def test_generate_top_down_guides_rolls_up_directory_nodes_bottom_up(tmp_p
 @pytest.mark.asyncio
 async def test_generate_top_down_guides_stages_chapter_then_book_prompts(tmp_path, monkeypatch):
     monkeypatch.setenv("STORAGE_DIR", str(tmp_path))
-    learning_dir = tmp_path / "book-uuid" / "book_learning"
-    learning_dir.mkdir(parents=True)
-    (learning_dir / "1.md").write_text(
-        "\n".join(
-            [
-                "# Chapter Learning Context",
-                "",
-                "## Summary",
-                "Forms are alternating multilinear tools for integration.",
-                "",
-                "## Concepts",
-                "- **Differential form**: A coordinate-free integrand.",
-                "",
-                "## Key Theorems",
-                "- **Stokes theorem**: Boundary integral equals derivative integral.",
-                "",
-                "## Dependencies",
-                "- Linear algebra",
-            ]
-        ),
-        encoding="utf-8",
+    translated_dir = tmp_path / "book-uuid" / "book_trans_md"
+    translated_dir.mkdir(parents=True)
+    (translated_dir / "1_trans_zh.md").write_text(
+        "Forms are alternating multilinear tools for integration.", encoding="utf-8"
     )
-    (learning_dir / "2.md").write_text(
-        "\n".join(
-            [
-                "# Chapter Learning Context",
-                "",
-                "## Summary",
-                "Integration uses forms on oriented manifolds.",
-                "",
-                "## Concepts",
-                "- **Orientation**: A consistent sign convention.",
-                "",
-                "## Key Theorems",
-                "- None",
-                "",
-                "## Dependencies",
-                "- Differential forms",
-            ]
-        ),
-        encoding="utf-8",
+    (translated_dir / "2_trans_zh.md").write_text(
+        "Integration uses forms on oriented manifolds.", encoding="utf-8"
     )
 
     class Book:
@@ -413,28 +461,9 @@ async def test_generate_top_down_guides_stages_chapter_then_book_prompts(tmp_pat
 @pytest.mark.asyncio
 async def test_generate_top_down_guides_forces_expected_scope_metadata(tmp_path, monkeypatch):
     monkeypatch.setenv("STORAGE_DIR", str(tmp_path))
-    learning_dir = tmp_path / "book-uuid" / "book_learning"
-    learning_dir.mkdir(parents=True)
-    (learning_dir / "1.md").write_text(
-        "\n".join(
-            [
-                "# Chapter Learning Context",
-                "",
-                "## Summary",
-                "Chapter summary.",
-                "",
-                "## Concepts",
-                "- **Concept**: Detail.",
-                "",
-                "## Key Theorems",
-                "- None",
-                "",
-                "## Dependencies",
-                "- None",
-            ]
-        ),
-        encoding="utf-8",
-    )
+    translated_dir = tmp_path / "book-uuid" / "book_trans_md"
+    translated_dir.mkdir(parents=True)
+    (translated_dir / "1_trans_zh.md").write_text("Chapter body.", encoding="utf-8")
 
     class Book:
         uuid = "book-uuid"

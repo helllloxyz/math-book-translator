@@ -92,10 +92,18 @@
                 role="menuitem"
                 @click="translateBook(book); closeMenus()"
               >
-                {{ book.status === 'failed' ? '重试翻译' : '开始翻译' }}
+                {{ book.status === 'failed' ? '重试处理' : '开始翻译' }}
               </button>
               <button v-else-if="isBackgroundBusy(book)" class="menu-item" type="button" disabled>
                 {{ isTranslating(book) ? `翻译中 ${translationPercent(book)}%` : '正在生成导读' }}
+              </button>
+              <button
+                v-if="book.status === 'translated'"
+                class="menu-item"
+                role="menuitem"
+                @click="generateBookGuides(book); closeMenus()"
+              >
+                生成 / 重新生成导读
               </button>
               <router-link :to="{ name: 'notes', params: { id: book.id }}" class="menu-item menu-link" role="menuitem" @click="closeMenus">
                 查看笔记
@@ -672,6 +680,15 @@ const translateBook = async (book) => {
   }
 }
 
+const generateBookGuides = async (book) => {
+  try {
+    await bookStore.generateBookGuides(book.id)
+    showNotification('导读生成任务已开始', 'success')
+  } catch (error) {
+    showNotification(`无法生成导读：${error.message}`, 'error')
+  }
+}
+
 const loadLearningProfileStatuses = async () => {
   const entries = await Promise.all(
     books.value.map(async (book) => {
@@ -754,6 +771,7 @@ const startBookQuiz = async (book) => {
         reader_type: 'chapter',
         chapter_id: target.chapter_id,
         quiz: '1',
+        quiz_mode: 'book',
         question_type: target.question_type
       }
     })

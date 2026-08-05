@@ -70,7 +70,7 @@ def test_book_tree_sorts_mixed_missing_parent_indexes_without_type_error():
     assert titles(tree[1]["children"]) == ["appendix child"]
 
 
-def test_guide_tree_keeps_learning_when_major_chapter_index_is_missing():
+def test_guide_tree_omits_empty_directories_when_no_guides_exist():
     chapters = [
         Chapter(11, "1.1", "c 1.1", 1),
         Chapter(12, "1.2", "c 1.2", 2),
@@ -78,15 +78,10 @@ def test_guide_tree_keeps_learning_when_major_chapter_index_is_missing():
 
     tree = ReaderTreeService.build_guide_tree(chapters, [])
 
-    assert titles(tree) == ["Book Guides", "1"]
-    assert titles(tree[1]["children"]) == ["c 1.1", "c 1.2"]
-    assert tree[1]["children"][0]["type"] == "learning"
-    assert tree[1]["children"][0]["chapter_id"] == 11
-    assert tree[1]["children"][1]["type"] == "learning"
-    assert tree[1]["children"][1]["chapter_id"] == 12
+    assert tree == []
 
 
-def test_guide_tree_groups_book_guides_chapter_guides_and_first_child_learning():
+def test_guide_tree_contains_only_generated_guides():
     chapters = [
         Chapter(10, "1", "Chapter 1", 1),
         Chapter(11, "1.1", "c 1.1", 2),
@@ -126,35 +121,19 @@ def test_guide_tree_groups_book_guides_chapter_guides_and_first_child_learning()
 
     tree = ReaderTreeService.build_guide_tree(chapters, guides)
 
-    assert titles(tree) == ["Book Guides", "Chapter 1", "Chapter 2"]
+    assert titles(tree) == ["Book Guides", "Chapter 1"]
     assert titles(tree[0]["children"]) == ["Book Overview"]
     assert tree[0]["children"][0]["source_type"] == "book_guide"
 
     chapter_1 = tree[1]
-    assert titles(chapter_1["children"]) == ["Guides 0", "Chapter 1", "c 1.1", "c 1.2"]
+    assert titles(chapter_1["children"]) == ["Guides 0", "c 1.1"]
     assert chapter_1["children"][0]["type"] == "guide"
     assert chapter_1["children"][0]["source_type"] == "directory_guide"
     assert chapter_1["children"][0]["chapter_id"] == 10
     assert chapter_1["children"][0]["chapter_index"] == "1"
-    assert chapter_1["children"][1]["type"] == "learning"
-    assert chapter_1["children"][1]["chapter_id"] == 10
-
-    section_1_1 = chapter_1["children"][2]
-    assert titles(section_1_1["children"]) == ["c 1.1", "c 1.1.1"]
-    section_1_1_learning = section_1_1["children"][0]
-    assert section_1_1_learning["type"] == "learning"
-    assert section_1_1_learning["chapter_id"] == 11
-    leaf_1_1_1 = section_1_1["children"][1]
-    assert titles(leaf_1_1_1["children"]) == ["Guide 1.1.1", "c 1.1.1"]
-    assert leaf_1_1_1["children"][0]["source_type"] == "chapter_guide"
-    assert leaf_1_1_1["children"][0]["chapter_id"] == 12
-    assert leaf_1_1_1["children"][0]["chapter_index"] == "1.1.1"
-    assert leaf_1_1_1["children"][1]["type"] == "learning"
-    assert leaf_1_1_1["children"][1]["chapter_id"] == 12
-    assert leaf_1_1_1["children"][1]["source_type"] == "chapter_learning"
-    assert leaf_1_1_1["children"][1]["source_id"] == "learning:12"
-
-    chapter_2 = tree[2]
-    assert chapter_2["type"] == "learning"
-    assert chapter_2["title"] == "Chapter 2"
-    assert chapter_2["chapter_id"] == 20
+    section_1_1 = chapter_1["children"][1]
+    assert titles(section_1_1["children"]) == ["Guide 1.1.1"]
+    leaf_1_1_1 = section_1_1["children"][0]
+    assert leaf_1_1_1["source_type"] == "chapter_guide"
+    assert leaf_1_1_1["chapter_id"] == 12
+    assert leaf_1_1_1["chapter_index"] == "1.1.1"

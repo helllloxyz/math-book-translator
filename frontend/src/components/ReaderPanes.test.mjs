@@ -16,7 +16,7 @@ assert.match(component, /go-previous/, 'reader panes should emit previous naviga
 assert.match(component, /go-next/, 'reader panes should emit next navigation')
 assert.match(component, /const translatedOrSourceHtml = computed/, 'reader panes should centralize translated-or-source fallback')
 assert.match(component, /const isSelectedGuideDual = computed/, 'guide dual should distinguish a selected guide from a selected chapter')
-assert.match(component, /\['guide', 'learning'\]\.includes\(props\.currentItem\?\.type\)/, 'guide dual should treat selected learning like selected guide content')
+assert.match(component, /props\.currentItem\?\.type === 'guide'/, 'guide dual should treat only generated guides as guide content')
 assert.match(component, /isSelectedGuideDual\.value \? props\.renderedSource : translatedOrSourceHtml\.value/, 'selected guide dual left pane should show chapter content')
 assert.match(component, /isSelectedGuideDual\.value \? translatedOrSourceHtml\.value : props\.renderedGuide/, 'selected guide dual right pane should show the selected guide content')
 assert.match(component, /syncPaneScroll/, 'dual panes should synchronize scrolling')

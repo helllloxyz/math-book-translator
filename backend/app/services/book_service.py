@@ -18,7 +18,6 @@ from app.models.schema import Book, Chapter, BookStatus, UserNote
 from app.models.base import SessionLocal
 from app.services.book_storage import BookStorage
 from app.services.guide_compiler_service import GuideCompilerService
-from app.services.learning_context_service import LearningContextService
 from app.services.llm_json import extract_json_candidate
 from app.services.parser import MarkdownSplitter
 from app.services.prompts import PromptId, PromptRegistry
@@ -521,6 +520,8 @@ class BookService:
             for path in sorted(book_dir.rglob("*")):
                 if not path.is_file():
                     continue
+                if path.relative_to(book_dir).parts[0] == "book_learning":
+                    continue
                 if path.name.endswith(".tmp") or path.name.startswith("."):
                     continue
                 resolved = path.resolve()
@@ -673,19 +674,6 @@ class BookService:
         temp_path = trans_path.with_suffix(trans_path.suffix + ".tmp")
         temp_path.write_text(translated_text, encoding="utf-8")
         temp_path.replace(trans_path)
-
-        try:
-            learning_translator = TranslatorService(task="learning_context")
-            await LearningContextService.compile_chapter_learning(
-                book_uuid=book.uuid,
-                chapter_index=chapter.chapter_index,
-                chapter_title=chapter.title_en or chapter.title_zh or chapter.chapter_index,
-                raw_text=content_raw,
-                translated_text=translated_text,
-                translator=learning_translator,
-            )
-        except Exception as exc:
-            logger.warning("Chapter learning compilation failed for %s: %s", chapter.chapter_index, exc)
         return True
 
     @staticmethod
@@ -726,52 +714,14 @@ class BookService:
         return TranslationPlan(total=plan.total, completed=completed, pending=[], failed=failed)
 
     @staticmethod
-    async def ensure_chapter_learning_contexts(book, chapters, translator) -> int:
-        compiled = 0
-        for chapter in chapters:
-            chapter_title = chapter.title_en or chapter.title_zh or chapter.chapter_index
-            learning_path = BookStorage.learning_path(book.uuid, chapter.chapter_index)
-            if learning_path.exists() and learning_path.stat().st_size > 0:
-                continue
-
-            raw_path = BookStorage.raw_chapter_path(book.uuid, chapter.chapter_index)
-            trans_path = BookStorage.translated_chapter_path(book.uuid, chapter.chapter_index)
-            if not raw_path.exists() or not trans_path.exists() or trans_path.stat().st_size == 0:
-                continue
-
-            raw_text = raw_path.read_text(encoding="utf-8")
-            translated_text = trans_path.read_text(encoding="utf-8")
-            if not raw_text.strip() or not translated_text.strip():
-                continue
-
-            try:
-                await LearningContextService.compile_chapter_learning(
-                    book_uuid=book.uuid,
-                    chapter_index=chapter.chapter_index,
-                    chapter_title=chapter_title,
-                    raw_text=raw_text,
-                    translated_text=translated_text,
-                    translator=translator,
-                )
-                compiled += 1
-            except Exception as exc:
-                logger.warning(
-                    "Chapter learning compilation failed for %s while preparing guides: %s",
-                    chapter.chapter_index,
-                    exc,
-                )
-        return compiled
-
-    @staticmethod
     async def generate_guides_for_translated_book(book, chapters, translator, session, book_id: int) -> None:
         book.status = BookStatus.generating_guides
         await session.commit()
-
-        await BookService.ensure_chapter_learning_contexts(book, chapters, translator)
         try:
             await GuideCompilerService.generate_top_down_guides(book, chapters, translator)
-        except Exception as exc:
-            logger.warning("Top-down guide generation failed for book %s: %s", book_id, exc)
+        except Exception:
+            logger.exception("Top-down guide generation failed for book %s", book_id)
+            raise
 
     @staticmethod
     async def process_book_translation(book_id: int):
@@ -803,8 +753,10 @@ class BookService:
                 book.translation_failed = initial_plan.failed
                 if not initial_plan.pending:
                     if initial_plan.total:
-                        translator = TranslatorService(task="guides")
-                        await BookService.generate_guides_for_translated_book(book, chapters, translator, session, book_id)
+                        guide_translator = TranslatorService(task="guides")
+                        await BookService.generate_guides_for_translated_book(
+                            book, chapters, guide_translator, session, book_id
+                        )
                         book.status = BookStatus.translated
                     else:
                         book.status = BookStatus.loaded
@@ -831,7 +783,10 @@ class BookService:
                 book.translation_completed = final_plan.completed
                 book.translation_failed = final_plan.failed
                 if final_plan.failed == 0 and final_plan.completed == final_plan.total:
-                    await BookService.generate_guides_for_translated_book(book, chapters, translator, session, book_id)
+                    guide_translator = TranslatorService(task="guides")
+                    await BookService.generate_guides_for_translated_book(
+                        book, chapters, guide_translator, session, book_id
+                    )
                     book.status = BookStatus.translated
                 else:
                     book.status = BookStatus.failed

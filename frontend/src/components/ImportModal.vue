@@ -179,7 +179,7 @@
           <section class="package-section">
             <div>
               <h3>Import Portable Package</h3>
-              <p class="help-text">Upload a .zip package exported from this app. The package restores book files, translated chapters, learning context, guides, and images.</p>
+              <p class="help-text">Upload a .zip package exported from this app. The package restores book files, translated chapters, guides, reader profile files, and images.</p>
             </div>
             <label class="file-dropzone compact">
               <input type="file" @change="onPackageFileChange" accept=".zip,application/zip" />

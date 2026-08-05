@@ -63,23 +63,6 @@ class ReaderTreeService:
         }
 
     @staticmethod
-    def learning_leaf(chapter, *, title: str | None = None) -> dict:
-        resolved_title = title or ReaderTreeService.chapter_title(chapter)
-        return {
-            "id": f"learning:{chapter.id}",
-            "kind": "leaf",
-            "type": "learning",
-            "title": resolved_title,
-            "label": chapter.chapter_index,
-            "chapter_id": chapter.id,
-            "chapter_index": chapter.chapter_index,
-            "content_type": getattr(chapter, "content_type", None) or "main_text",
-            "source_type": "chapter_learning",
-            "source_id": f"learning:{chapter.id}",
-            "source_title": resolved_title,
-        }
-
-    @staticmethod
     def directory_for_chapter(chapter) -> dict:
         return {
             "id": f"dir:book:{chapter.chapter_index}",
@@ -208,17 +191,17 @@ class ReaderTreeService:
             if guide.get("scope_type") in {"chapter", "directory"}:
                 scoped_guides.setdefault(str(guide.get("scope_id") or ""), []).append(guide)
 
-        tree = [
-            {
+        tree = []
+        if book_guides:
+            tree.append({
                 "id": "dir:guide:book",
                 "kind": "directory",
                 "type": "directory",
                 "title": "Book Guides",
                 "children": [ReaderTreeService.guide_leaf(guide) for guide in book_guides],
-            }
-        ]
+            })
 
-        def build_node(node: dict) -> dict:
+        def build_node(node: dict) -> dict | None:
             chapter = node["chapter"]
             chapter_index = node["index"]
             title = ReaderTreeService.chapter_title(chapter) if chapter else chapter_index
@@ -226,13 +209,16 @@ class ReaderTreeService:
                 ReaderTreeService.guide_leaf(guide, chapter=chapter, chapter_index=chapter_index)
                 for guide in scoped_guides.get(chapter_index, [])
             ]
-            child_nodes = [build_node(child) for child in node["children"]]
+            child_nodes = [
+                built
+                for child in node["children"]
+                if (built := build_node(child)) is not None
+            ]
+            if not children and not child_nodes:
+                return None
+            if len(children) == 1 and not child_nodes:
+                return children[0]
 
-            if chapter is not None and not children and not child_nodes:
-                return ReaderTreeService.learning_leaf(chapter, title=title)
-
-            if chapter is not None:
-                children.append(ReaderTreeService.learning_leaf(chapter))
             children.extend(child_nodes)
 
             return {
@@ -246,6 +232,10 @@ class ReaderTreeService:
                 "children": children,
             }
 
-        tree.extend(build_node(root) for root in ReaderTreeService._build_index_tree(chapters))
+        tree.extend(
+            built
+            for root in ReaderTreeService._build_index_tree(chapters)
+            if (built := build_node(root)) is not None
+        )
 
         return tree

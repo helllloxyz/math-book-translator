@@ -37,16 +37,6 @@ const guideTree = [
         scope_id: 'book',
         source_type: 'book_guide',
         source_id: 'guide:book:reading-path'
-      },
-      {
-        id: 'learning:42',
-        kind: 'leaf',
-        type: 'learning',
-        title: 'Orientations and Atlases',
-        chapter_id: 42,
-        chapter_index: '21.5',
-        source_type: 'chapter_learning',
-        source_id: 'learning:42'
       }
     ]
   }
@@ -81,11 +71,11 @@ assert.equal(
 
 assert.equal(
   findReaderLeafByRouteQuery(bookTree, guideTree, {
-    reader_type: 'learning',
+    reader_type: 'retired-reader-item',
     chapter_id: '42'
   })?.id,
-  'learning:42',
-  'route query should resolve learning items by reader type and chapter id'
+  'chapter:42',
+  'retired chapter-scoped reader links should fall back to the paired chapter body'
 )
 
 console.log('reader route query behavior ok')

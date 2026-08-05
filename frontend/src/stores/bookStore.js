@@ -132,6 +132,17 @@ export const useBookStore = defineStore('book', {
         throw new Error(message)
       }
     },
+    async generateBookGuides(id) {
+      try {
+        await apiClient.post(`/books/${id}/translate`)
+        const book = this.books.find(item => item.id === id)
+        if (book) book.status = 'generating_guides'
+      } catch (err) {
+        const message = err.response?.data?.detail || err.message
+        this.error = message
+        throw new Error(message)
+      }
+    },
     async renameBook(id, title) {
       try {
         await apiClient.put(`/books/${id}`, { title })
@@ -177,15 +188,6 @@ export const useBookStore = defineStore('book', {
       } catch (err) {
         this.error = err.response?.data?.detail || err.message
         throw err
-      }
-    },
-    async fetchChapterLearning(chapterId) {
-      try {
-        const response = await apiClient.get(`/chapters/${chapterId}/learning`)
-        return response.data
-      } catch (err) {
-        console.error(err)
-        return { summary: '', concepts: [], key_theorems: [], dependencies: [] }
       }
     },
     async fetchChapterNotes(chapterId) {
@@ -317,6 +319,7 @@ export const useBookStore = defineStore('book', {
     async fetchNextQuizQuestion(chapterId, options = {}) {
       try {
         const response = await apiClient.post(`/chapters/${chapterId}/quiz/next`, {
+          quiz_mode: options.quizMode || options.quiz_mode || 'chapter',
           question_type: options.questionType || options.question_type || null,
           personalization_context: options.personalizationContext || options.personalization_context || null
         })
@@ -326,10 +329,11 @@ export const useBookStore = defineStore('book', {
         throw err
       }
     },
-    async submitQuizAttempt(questionId, answerText) {
+    async submitQuizAttempt(questionId, answerText, conversationHistory = []) {
       try {
         const response = await apiClient.post(`/quiz/questions/${questionId}/attempts`, {
-          answer_text: answerText
+          answer_text: answerText,
+          conversation_history: conversationHistory
         })
         return response.data
       } catch (err) {

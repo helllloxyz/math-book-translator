@@ -95,6 +95,7 @@ class QuizQuestion(Base):
     id = Column(Integer, primary_key=True, index=True)
     book_id = Column(Integer, ForeignKey("books.id"), nullable=False, index=True)
     chapter_id = Column(Integer, ForeignKey("chapters.id"), nullable=True, index=True)
+    quiz_mode = Column(String, default="chapter", server_default="chapter", nullable=False, index=True)
     source = Column(String, default="generated", index=True)
     question_type = Column(String, nullable=False, index=True)
     difficulty = Column(String, default="medium", index=True)
@@ -148,11 +149,13 @@ class ChatRequest(BaseModel):
     mode: str = "chat"
 
 class QuizNextRequest(BaseModel):
+    quiz_mode: str = "chapter"
     question_type: Optional[str] = None
     personalization_context: Optional[str] = None
 
 class QuizAttemptRequest(BaseModel):
     answer_text: str
+    conversation_history: List[Dict] = Field(default_factory=list)
 
 class QuizSelectTargetRequest(BaseModel):
     personalization_context: Optional[str] = None
@@ -163,8 +166,10 @@ class QuizQuestionResponse(BaseModel):
     id: int
     book_id: int
     chapter_id: Optional[int] = None
+    quiz_mode: str = "chapter"
     source: str
     question_type: str
+    question_type_label: str = ""
     difficulty: str
     target_concepts: List[str] = []
     question_text: str
@@ -173,6 +178,7 @@ class QuizQuestionResponse(BaseModel):
     context_refs: List[Dict[str, Any]] = []
     evaluation_rubric: Dict[str, Any] = {}
     followup_strategy: Optional[str] = None
+    answer_guidance: str = ""
 
 
 class UpdateNoteRequest(BaseModel):

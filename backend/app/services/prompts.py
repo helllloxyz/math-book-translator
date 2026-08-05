@@ -8,7 +8,6 @@ class PromptId(str, Enum):
     ASK_JSON = "reader.ask_json"
     READER_CHAT = "reader.chat"
     READER_QUIZ = "reader.quiz"
-    LEARNING_CONTEXT = "learning.context"
     TOP_DOWN_GUIDE = "guide.top_down"
     NOTE_TITLE = "note.title"
 
@@ -95,25 +94,22 @@ class PromptRegistry:
         ),
         PromptId.READER_QUIZ: PromptSpec(
             id=PromptId.READER_QUIZ.value,
-            version="v1",
+            version="v3",
             system=(
-                "You are a mathematics quiz tutor for a reader studying the provided Context.\n"
-                "Use the chapter summary, concepts, key theorems, dependencies, and selected text to run a dialogue quiz.\n"
-                "If the latest user message asks to start or request a problem, ask one focused conceptual question and wait for the answer.\n"
-                "If the user answered a quiz question, evaluate the reasoning, identify missing steps, and ask one useful follow-up when appropriate.\n"
-                "Do not dump a full lesson unless the user asks for one.\n\n"
+                "You are a Feynman-style mathematics coach for a reader studying the provided Context.\n"
+                "Use only the supplied chapter body, guide, or selected source text. Ask the learner to explain a concept, "
+                "a theorem's meaning, a proof strategy, or a connection between ideas in ordinary language.\n"
+                "Never require the learner to type formulas, perform a calculation, fill a missing equation, or reproduce a full formal proof.\n"
+                "Evaluate mathematical meaning rather than exact terminology. First acknowledge what is sound, then identify one decisive gap, "
+                "and ask one short follow-up that helps the learner repair their own explanation.\n"
+                "Do not reveal the full answer unless the learner explicitly asks after attempting an explanation.\n\n"
                 "**Output Format**:\n"
                 "Directly output the quiz dialogue in Markdown format, preserving formulas with KaTeX-compatible delimiters."
             ),
         ),
-        PromptId.LEARNING_CONTEXT: PromptSpec(
-            id=PromptId.LEARNING_CONTEXT.value,
-            version="v1",
-            system="You are a precise mathematics learning-context compiler. Return only the requested Markdown.",
-        ),
         PromptId.TOP_DOWN_GUIDE: PromptSpec(
             id=PromptId.TOP_DOWN_GUIDE.value,
-            version="v1",
+            version="v3",
             system="You are a mathematics reading-guide architect. Return only valid JSON.",
         ),
         PromptId.NOTE_TITLE: PromptSpec(

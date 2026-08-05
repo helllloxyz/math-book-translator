@@ -468,7 +468,7 @@ class TranslatorService:
 
         system_prompt = PromptRegistry.get(PromptId.NOTE_TITLE).system
         
-        content = f"Context:\n{context[:500]}\n\nQuestion: {prompt}"
+        content = f"Context:\n{context}\n\nQuestion: {prompt}"
         
         try:
             res = await self.complete(content, system_prompt, temperature=0.3)

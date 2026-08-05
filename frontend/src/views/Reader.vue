@@ -131,7 +131,6 @@
 import { computed, nextTick, ref, onBeforeUnmount, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useBookStore } from '../stores/bookStore'
-import { useChapterLearningContext } from '../composables/useChapterLearningContext'
 import { useLearningCards } from '../composables/useLearningCards'
 import { useReaderContent } from '../composables/useReaderContent'
 import { useSelectionMenu } from '../composables/useSelectionMenu'
@@ -169,17 +168,11 @@ const {
   activateAskCard,
   loadAskNotes,
 } = useLearningCards()
-const {
-  createEmptyLearningContext
-} = useChapterLearningContext()
-
 const viewportRef = ref(null)
 const viewMode = ref('single')
 const sidebarOpen = ref(true)
 const notesPanelOpen = ref(typeof window === 'undefined' ? true : window.innerWidth > 1440)
 const readingPercent = ref(0)
-const chapterLearning = ref(createEmptyLearningContext())
-const learningContextChapterId = ref(null)
 const chapterReadingStatus = ref(defaultChapterReadingStatus())
 const bookTree = ref([])
 const guideTree = ref([])
@@ -261,40 +254,6 @@ const resetGuidePane = () => {
   guideLoading.value = false
 }
 
-const normalizeLearningList = (value) => {
-  if (Array.isArray(value)) return value
-  if (typeof value === 'string' && value.trim()) return [value]
-  return []
-}
-
-const formatLearningItem = (item) => {
-  if (typeof item === 'string') return item
-  if (!item || typeof item !== 'object') return ''
-
-  const title = item.name || item.title || item.term || ''
-  const detail = item.description || item.statement || item.summary || item.content || ''
-  if (title && detail) return `**${title}:** ${detail}`
-  return title || detail
-}
-
-const formatLearningSection = (title, value) => {
-  const items = normalizeLearningList(value).map(formatLearningItem).filter(Boolean)
-  if (!items.length) return ''
-
-  return [`## ${title}`, ...items.map((item) => `- ${item}`)].join('\n')
-}
-
-const learningToMarkdown = (learning) => {
-  const sections = [
-    learning?.summary ? `## Summary\n\n${learning.summary}` : '',
-    formatLearningSection('Concepts', learning?.concepts),
-    formatLearningSection('Key Theorems', learning?.key_theorems),
-    formatLearningSection('Dependencies', learning?.dependencies)
-  ].filter(Boolean)
-
-  return sections.length ? sections.join('\n\n') : '_No learning summary available._'
-}
-
 const loadCurrentChapterGuide = async () => {
   const requestId = guideRequestId.value + 1
   guideRequestId.value = requestId
@@ -314,14 +273,11 @@ const loadCurrentChapterGuide = async () => {
   guideLoading.value = true
   try {
     const data = await bookStore.fetchReaderContent(book.value?.id, {
-      readerType: guide.type === 'learning' ? 'learning' : 'guide',
-      chapterId: guide.type === 'learning' ? (guide.chapter_id || currentItem.value?.chapter_id) : null,
-      guideId: guide.type === 'learning' ? '' : guide.id
+      readerType: 'guide',
+      guideId: guide.id
     })
     if (requestId !== guideRequestId.value) return
-    const guideMarkdown = guide.type === 'learning'
-      ? learningToMarkdown(data?.learning || data)
-      : (data?.content || '_No guide content available._')
+    const guideMarkdown = data?.content || '_No guide content available._'
     renderedGuide.value = renderMarkdown(guideMarkdown, book.value)
     renderCurrentViewport()
   } catch (error) {
@@ -367,19 +323,6 @@ const updateChapterDifficulty = (difficulty) => {
   })
 }
 
-const ensureChapterLearning = async (chapter) => {
-  if (!chapter) return createEmptyLearningContext()
-  if (learningContextChapterId.value === chapter.id) return chapterLearning.value
-
-  try {
-    chapterLearning.value = await bookStore.fetchChapterLearning(chapter.id)
-  } catch (_error) {
-    chapterLearning.value = createEmptyLearningContext()
-  }
-  learningContextChapterId.value = chapter.id
-  return chapterLearning.value
-}
-
 const htmlToText = (html) => {
   const element = document.createElement('div')
   element.innerHTML = html || ''
@@ -399,9 +342,10 @@ const buildReaderItemContext = async (card) => {
       })
       const translatedContent = chapterData?.content_translated
       const rawContent = chapterData?.content_raw
-      return typeof translatedContent === 'string' && translatedContent.trim()
+      const body = typeof translatedContent === 'string' && translatedContent.trim()
         ? translatedContent
         : (typeof rawContent === 'string' ? rawContent : '')
+      return body
     } catch (error) {
       console.error('Failed to load full chapter context for note:', error)
     }
@@ -442,8 +386,6 @@ const resetToolCards = async (item) => {
   }
   readerAnnotations.value = notes.filter((note) => note.type === 'annotation')
   loadAskNotes(notes, subject)
-  chapterLearning.value = createEmptyLearningContext()
-  learningContextChapterId.value = null
 }
 
 const replaceReaderRouteQuery = async (item, extraQuery = {}) => {
@@ -695,9 +637,6 @@ const activateNoteCard = async (card) => {
   if (card?.type === 'selection') {
     await focusSelectionSource(card)
   }
-  if (currentChapter.value) {
-    await ensureChapterLearning(currentChapter.value)
-  }
   await openConversationPage(card)
 }
 
@@ -711,10 +650,10 @@ const openChapterNote = async () => {
 const openQuizDialog = async (options = {}) => {
   const subject = currentToolSubject.value
   if (!subject || !currentChapter.value?.id) return
-  await ensureChapterLearning(currentChapter.value)
   let card = null
   try {
     const question = await bookStore.fetchNextQuizQuestion(currentChapter.value.id, {
+      quizMode: options.quizMode || 'chapter',
       questionType: options.questionType,
       personalizationContext: options.personalizationContext
     })
@@ -745,7 +684,6 @@ const openConversationPage = async (card) => {
     mode: card.type === 'quiz' ? 'quiz' : 'note',
     card,
     contextText,
-    chapterSummary: chapterLearning.value.summary || '',
     metadata,
     title: buildConversationDocumentTitle(card, metadata)
   })
@@ -881,6 +819,7 @@ onMounted(async () => {
       personalization = ''
     }
     await openQuizDialog({
+      quizMode: String(route.query.quiz_mode || 'book'),
       questionType: String(route.query.question_type || ''),
       personalizationContext: personalization
     })

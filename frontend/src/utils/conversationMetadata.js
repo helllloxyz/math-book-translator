@@ -25,8 +25,8 @@ export const buildConversationMetadata = (book, item) => {
     sourceType: item?.source_type || '',
     sourceId: item?.source_id || '',
     sourceTitle: item?.source_title || item?.title || chapter.title_zh || chapter.title_en || '',
-    chapterId: readerType === 'chapter' || readerType === 'learning' ? chapterId : '',
-    chapterIndex: readerType === 'chapter' || readerType === 'learning' ? chapterIndex : '',
+    chapterId: readerType === 'chapter' ? chapterId : '',
+    chapterIndex: readerType === 'chapter' ? chapterIndex : '',
     guideId: readerType === 'guide' ? (item?.id || item?.guideId || item?.guide_id || '') : ''
   }
 }

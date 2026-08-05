@@ -151,7 +151,7 @@ async def test_translate_text_prompt_requests_latex_ocr_fixes_without_explanatio
 
 
 @pytest.mark.asyncio
-async def test_generate_title_uses_first_500_context_chars_and_question(monkeypatch):
+async def test_generate_title_uses_complete_context_and_question(monkeypatch):
     monkeypatch.setattr(
         SettingsService,
         "get_current_settings",
@@ -170,10 +170,10 @@ async def test_generate_title_uses_first_500_context_chars_and_question(monkeypa
 
     service = TranslatorService()
     service.api_key = "test-key"
-    context = "a" * 500 + "b" * 20
+    context = "a" * 900
 
     async def fake_complete(user_prompt, system_prompt, temperature=0.3):
-        assert user_prompt == f"Context:\n{'a' * 500}\n\nQuestion: 为什么这里需要紧性？"
+        assert user_prompt == f"Context:\n{'a' * 900}\n\nQuestion: 为什么这里需要紧性？"
         assert "Chinese title" in system_prompt
         assert "no trailing punctuation" in system_prompt
         assert temperature == 0.3

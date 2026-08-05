@@ -55,12 +55,18 @@ assert.equal(chapterNoteFromSelection.initialPrompt, 'What does this orientation
 const quizCard = createQuizQuestionCard(chapter, {
   id: 9,
   question_type: 'concept_explain',
+  question_type_label: '概念讲解',
+  quiz_mode: 'book',
   question_text: 'Explain an oriented atlas.',
+  answer_guidance: 'Use your own words; no formulas required.',
   expected_points: ['compatible charts'],
   evaluation_rubric: { completed: 'Accurate explanation' }
 })
 assert.equal(quizCard.questionId, 9)
 assert.equal(quizCard.questionType, 'concept_explain')
+assert.equal(quizCard.questionTypeLabel, '概念讲解')
+assert.equal(quizCard.quizMode, 'book')
+assert.equal(quizCard.answerGuidance, 'Use your own words; no formulas required.')
 assert.deepEqual(quizCard.expectedPoints, ['compatible charts'])
 assert.deepEqual(quizCard.rubric, { completed: 'Accurate explanation' })
 assert.equal(quizCard.messages[0].content, 'Explain an oriented atlas.')
@@ -74,7 +80,10 @@ assert.deepEqual(
     expectedPoints: ['compatible charts'],
     rubric: { completed: 'Accurate explanation' },
     personalizationContext: '',
-    questionText: 'Explain an oriented atlas.'
+    questionText: 'Explain an oriented atlas.',
+    quizMode: 'book',
+    questionTypeLabel: '概念讲解',
+    answerGuidance: 'Use your own words; no formulas required.'
   },
   'structured quiz cards should serialize metadata needed for later attempts'
 )
@@ -101,6 +110,9 @@ const reopenedQuizCard = askCards.value[0]
 assert.equal(reopenedQuizCard.type, 'quiz')
 assert.equal(reopenedQuizCard.questionId, 9)
 assert.equal(reopenedQuizCard.questionType, 'concept_explain')
+assert.equal(reopenedQuizCard.quizMode, 'book')
+assert.equal(reopenedQuizCard.questionTypeLabel, '概念讲解')
+assert.equal(reopenedQuizCard.answerGuidance, 'Use your own words; no formulas required.')
 assert.deepEqual(reopenedQuizCard.expectedPoints, ['compatible charts'])
 assert.deepEqual(reopenedQuizCard.rubric, { completed: 'Accurate explanation' })
 assert.equal(reopenedQuizCard.questionText, 'Explain an oriented atlas.')
@@ -134,6 +146,7 @@ assert.match(
   /\/quiz\/questions\/\$\{card\.questionId\}\/attempts/,
   'streamCardChat should submit reopened structured quiz answers to the attempts endpoint'
 )
+assert.match(useChatSource, /conversation_history:\s*history/, 'follow-up answers should be evaluated with prior teach-back context')
 
 const guide = {
   id: 'guide:01-reading-path.md',

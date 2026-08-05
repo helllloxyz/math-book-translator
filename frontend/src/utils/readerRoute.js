@@ -20,7 +20,7 @@ export const buildReaderItemQuery = (item, extraQuery = {}) => {
     reader_type: stringValue(item.type)
   }
 
-  if (item.type === 'chapter' || item.type === 'learning') {
+  if (item.type === 'chapter') {
     query.chapter_id = stringValue(item.chapterId || item.chapter_id)
   }
 
@@ -46,9 +46,9 @@ export const findReaderLeafByRouteQuery = (bookTree = [], guideTree = [], query 
     if (guide) return guide
   }
 
-  if ((readerType === 'chapter' || readerType === 'learning') && chapterId) {
+  if (readerType !== 'guide' && chapterId) {
     const chapter = leaves.find((leaf) => (
-      leaf.type === readerType &&
+      leaf.type === 'chapter' &&
       stringValue(leaf.chapter_id || leaf.chapterId) === chapterId
     ))
     if (chapter) return chapter

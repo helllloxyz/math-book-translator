@@ -32,7 +32,10 @@ export function useChat() {
                     : [],
             rubric: metadata.rubric || metadata.evaluation_rubric || {},
             personalizationContext: metadata.personalizationContext || metadata.personalization_context || '',
-            questionText: metadata.questionText || metadata.question_text || ''
+            questionText: metadata.questionText || metadata.question_text || '',
+            quizMode: metadata.quizMode || metadata.quiz_mode || 'chapter',
+            questionTypeLabel: metadata.questionTypeLabel || metadata.question_type_label || '',
+            answerGuidance: metadata.answerGuidance || metadata.answer_guidance || ''
         }
     }
 
@@ -54,7 +57,10 @@ export function useChat() {
                 : serializedMetadata?.expectedPoints || [],
             rubric: card.rubric || serializedMetadata?.rubric || {},
             personalizationContext: card.personalizationContext || serializedMetadata?.personalizationContext || '',
-            questionText: card.questionText || serializedMetadata?.questionText || ''
+            questionText: card.questionText || serializedMetadata?.questionText || '',
+            quizMode: card.quizMode || serializedMetadata?.quizMode || 'chapter',
+            questionTypeLabel: card.questionTypeLabel || serializedMetadata?.questionTypeLabel || '',
+            answerGuidance: card.answerGuidance || serializedMetadata?.answerGuidance || ''
         }
     }
 
@@ -67,6 +73,9 @@ export function useChat() {
         card.rubric = metadata.rubric
         card.personalizationContext = metadata.personalizationContext
         card.questionText = metadata.questionText
+        card.quizMode = metadata.quizMode
+        card.questionTypeLabel = metadata.questionTypeLabel
+        card.answerGuidance = metadata.answerGuidance
         return metadata
     }
 
@@ -243,7 +252,8 @@ export function useChat() {
             const quizMetadata = card.type === 'quiz' ? applyCardQuizMetadata(card) : null
             if (card.type === 'quiz' && card.questionId && quizMetadata?.questionId != null) {
                 const response = await apiClient.post(`/quiz/questions/${card.questionId}/attempts`, {
-                    answer_text: userPrompt
+                    answer_text: userPrompt,
+                    conversation_history: history
                 })
                 messages[assistantIndex] = {
                     role: 'assistant',

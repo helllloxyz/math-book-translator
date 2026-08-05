@@ -76,11 +76,6 @@ class BookStorage:
         return BookStorage._safe_book_subpath(book_uuid, "book_trans_md", f"{safe_index}_trans_zh.md")
 
     @staticmethod
-    def learning_path(book_uuid: str, chapter_index: str) -> Path:
-        safe_index = BookStorage.chapter_filename_stem(chapter_index)
-        return BookStorage._safe_book_subpath(book_uuid, "book_learning", f"{safe_index}.md")
-
-    @staticmethod
     def user_dir(book_uuid: str) -> Path:
         return BookStorage._safe_book_subpath(book_uuid, "book_user")
 
@@ -108,6 +103,6 @@ class BookStorage:
     @staticmethod
     def ensure_book_dirs(book_uuid: str | None = None, *, root: str | Path | None = None) -> Path:
         book_root = Path(root) if root is not None else BookStorage.book_dir(book_uuid or "")
-        for dirname in ("book_md", "book_trans_md", "book_learning", "book_guides", "book_user"):
+        for dirname in ("book_md", "book_trans_md", "book_guides", "book_user"):
             (book_root / dirname).mkdir(parents=True, exist_ok=True)
         return book_root

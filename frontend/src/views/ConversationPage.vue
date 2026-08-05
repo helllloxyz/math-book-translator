@@ -5,7 +5,6 @@
       standalone
       :mode="card.type === 'quiz' ? 'quiz' : 'note'"
       :card="card"
-      :chapter-summary="chapterSummary"
       :metadata-info="metadata"
       @send="handleSend"
       @go-source="handleGoSource"
@@ -53,7 +52,6 @@ const bookStore = useBookStore()
 const conversationId = String(route.params.conversationId || '')
 const card = ref(null)
 const contextText = ref('')
-const chapterSummary = ref('')
 const metadata = ref({})
 const mode = ref('note')
 const pendingDeleteTarget = ref(null)
@@ -66,7 +64,6 @@ const persist = (updatedCard = card.value) => {
     mode: mode.value,
     card: updatedCard,
     contextText: contextText.value,
-    chapterSummary: chapterSummary.value,
     metadata: metadata.value
   })
 }
@@ -130,7 +127,6 @@ onMounted(() => {
 
   card.value = reactive(payload.card)
   contextText.value = payload.contextText || ''
-  chapterSummary.value = payload.chapterSummary || ''
   metadata.value = payload.metadata || {}
   mode.value = payload.mode || 'note'
   updateTitle()

@@ -13,7 +13,6 @@ from app.models.schema import Book, BookStatus, Chapter, ImportBookRequest, Rena
 from app.services.book_service import BookService
 from app.services.book_storage import BookStorage
 from app.services.guide_service import GuideService
-from app.services.learning_context_service import LearningContextService
 from app.services.reader_tree_service import ReaderTreeService
 from app.services.translator import LLMConfigurationError
 
@@ -155,7 +154,7 @@ async def read_chapter_content(book_uuid: str, chapter: Chapter) -> dict:
 @router.get("/books/{book_id}/reader-content")
 async def get_reader_content(
     book_id: int,
-    reader_type: str = Query(..., description="Reader item type: chapter, guide, or learning"),
+    reader_type: str = Query(..., description="Reader item type: chapter or guide"),
     chapter_id: int | None = Query(None),
     guide_id: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
@@ -169,16 +168,6 @@ async def get_reader_content(
         if chapter_id is None:
             raise HTTPException(status_code=400, detail="chapter_id is required for chapter reader content")
         data = await read_chapter_content(book.uuid, await chapter_for_reader_content(book_id, chapter_id, db))
-    elif reader_type == "learning":
-        if chapter_id is None:
-            raise HTTPException(status_code=400, detail="chapter_id is required for learning reader content")
-        chapter = await chapter_for_reader_content(book_id, chapter_id, db)
-        data = {
-            "reader_type": "learning",
-            "chapter_id": chapter.id,
-            "chapter_index": chapter.chapter_index,
-            "learning": LearningContextService.load_learning_context(book.uuid, chapter.chapter_index),
-        }
     elif reader_type == "guide":
         if not guide_id:
             raise HTTPException(status_code=400, detail="guide_id is required for guide reader content")
@@ -199,7 +188,7 @@ async def get_reader_content(
             "guide_id": guide_id,
         }
     else:
-        raise HTTPException(status_code=400, detail="reader_type must be chapter, guide, or learning")
+        raise HTTPException(status_code=400, detail="reader_type must be chapter or guide")
 
     return data
 

@@ -1,3 +1,4 @@
+import asyncio
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -6,9 +7,10 @@ from typing import Any
 import aiofiles
 
 from app.services.book_storage import BookStorage
-from app.services.learning_context_service import LearningContextService
+from app.services.chapter_source_service import ChapterSourceService
 from app.services.llm_json import extract_json_candidate, parse_json_text
 from app.services.prompts import PromptId, PromptRegistry
+from app.services.translator import LLMConfigurationError
 
 
 @dataclass
@@ -23,9 +25,13 @@ class GuideCompilerService:
     MAX_CHAPTER_GUIDES_PER_CHAPTER = 1
     MAX_DIRECTORY_GUIDES_PER_DIRECTORY = 1
     MAX_BOOK_GUIDES = 2
-    MAX_GUIDE_MARKDOWN_CHARS = 3500
+    MAX_CHAPTER_GUIDE_MARKDOWN_CHARS = 1200
+    MAX_DIRECTORY_GUIDE_MARKDOWN_CHARS = 1800
+    MAX_BOOK_GUIDE_MARKDOWN_CHARS = 2800
     MAX_MERMAID_NODES = 14
     MAX_MERMAID_EDGES = 18
+    MAX_LLM_RETRIES = 3
+    GUIDE_GENERATION_CONCURRENCY = 3
 
     @staticmethod
     def sanitize_guide_slug(slug: str) -> str:
@@ -47,24 +53,34 @@ You are creating chapter-level guides for a Top-Down reading workflow for an Eng
 Return strictly valid JSON:
 {{
   "guides": [
-    {{"slug": "concept-map", "title": "导读：本章概念地图", "summary": "One short Chinese summary of this guide.", "scope_type": "chapter", "scope_id": "{chapter_context.get("chapter_index", "")}", "markdown": "# 导读：本章概念地图\\n..."}}
+    {{"slug": "preview", "title": "导读：读前 60 秒", "summary": "One short Chinese sentence locating this chapter.", "scope_type": "chapter", "scope_id": "{chapter_context.get("chapter_index", "")}", "markdown": "# 读前 60 秒\\n..."}}
   ]
 }}
 
 Requirements:
-- Generate chapter-level guides only for the single chapter context provided below.
+- Generate chapter-level guides only from the single chapter body provided below.
 - Use `scope_type: "chapter"` and `scope_id` exactly equal to the provided `chapter_index`.
 - At most {GuideCompilerService.MAX_CHAPTER_GUIDES_PER_CHAPTER} chapter guide for this chapter.
-- Keep each guide markdown at most {GuideCompilerService.MAX_GUIDE_MARKDOWN_CHARS} characters.
-- Mermaid diagrams at most {GuideCompilerService.MAX_MERMAID_NODES} nodes and {GuideCompilerService.MAX_MERMAID_EDGES} edges.
-- Explain the chapter's purpose, core concepts, key theorem relationships, and local reading path.
-- Use Mermaid diagrams only where they clarify concept dependencies or theorem relationships.
+- Keep the guide markdown at most {GuideCompilerService.MAX_CHAPTER_GUIDE_MARKDOWN_CHARS} characters, including headings.
+- This guide is a 60-second preview shown beside the chapter body, not a replacement explanation.
+- Use exactly this compact structure:
+  - `# 读前 60 秒`
+  - `## 这一节要解决什么`: one or two short sentences.
+  - `## 带着这些问题读`: two or three unanswered questions that direct attention while reading.
+  - `## 阅读路线`: at most three one-sentence steps, describing what to skim, understand, and retain.
+  - `## 卡住时回看`: at most three prerequisite cues; omit the section when none is essential.
+- Do not create a concept glossary or a comprehensive summary.
+- Do not restate theorem proofs, derivations, examples, or every formula from the chapter context.
+- Mention each idea only once. Treat dependencies and concepts introduced in nearby chapters as background unless they are essential to entering this chapter.
+- Prefer plain Chinese and at most one anchor formula for the whole guide.
+- Do not use Mermaid diagrams in chapter-level guides.
 - Do not include full original chapter text.
+- Every claim must be grounded in the supplied body. Do not fill gaps from general knowledge.
 
 Book title:
 {book_title}
 
-Single chapter context:
+Single chapter body context:
 {json.dumps(chapter_context, ensure_ascii=False, indent=2)}
 """.strip()
 
@@ -84,7 +100,7 @@ Requirements:
 - Generate book-level guides for the whole book using only the generated top-level child guide summaries and metadata below.
 - Use `scope_type: "book"` and `scope_id: "book"`.
 - At most {GuideCompilerService.MAX_BOOK_GUIDES} book guide(s).
-- Keep each guide markdown at most {GuideCompilerService.MAX_GUIDE_MARKDOWN_CHARS} characters.
+- Keep each guide markdown at most {GuideCompilerService.MAX_BOOK_GUIDE_MARKDOWN_CHARS} characters.
 - Mermaid diagrams at most {GuideCompilerService.MAX_MERMAID_NODES} nodes and {GuideCompilerService.MAX_MERMAID_EDGES} edges.
 - Explain the book's core theme, application background when available, historical development when available, core concepts, key theorem relationships, and chapter-by-chapter reading path.
 - Do not include full chapter text.
@@ -115,11 +131,12 @@ Return strictly valid JSON:
 Requirements:
 - Generate directory-level guides only for the single directory context provided below.
 - Use `scope_type: "directory"` and `scope_id` exactly equal to the provided `directory_index`.
-- Use only the direct child guide summaries and metadata below.
+- Use the directory's own complete body when present and the direct child guide summaries below.
 - At most {GuideCompilerService.MAX_DIRECTORY_GUIDES_PER_DIRECTORY} directory guide for this directory.
-- Keep each guide markdown at most {GuideCompilerService.MAX_GUIDE_MARKDOWN_CHARS} characters.
-- Mermaid diagrams at most {GuideCompilerService.MAX_MERMAID_NODES} nodes and {GuideCompilerService.MAX_MERMAID_EDGES} edges.
-- Explain this directory's role, how its direct children connect, and the recommended reading path across those children.
+- Keep each guide markdown at most {GuideCompilerService.MAX_DIRECTORY_GUIDE_MARKDOWN_CHARS} characters.
+- Do not use Mermaid diagrams in directory guides.
+- Explain only this directory's role, how its direct children connect, and the recommended reading path across those children.
+- Do not create a concept glossary or repeat the child summaries item by item.
 - Do not include full child guide content or full chapter text.
 
 Book title:
@@ -178,6 +195,22 @@ direct_child_guide_inputs:
         return normalized[0] if normalized else guide
 
     @staticmethod
+    def _truncate_markdown_at_line_boundary(markdown: str, max_chars: int) -> str:
+        stripped = markdown.strip()
+        if len(stripped) <= max_chars:
+            return stripped
+
+        kept_lines: list[str] = []
+        current_length = 0
+        for line in stripped.splitlines():
+            added_length = len(line) + (1 if kept_lines else 0)
+            if current_length + added_length > max_chars:
+                break
+            kept_lines.append(line)
+            current_length += added_length
+        return "\n".join(kept_lines).rstrip()
+
+    @staticmethod
     def normalize_guides(data: Any) -> list[dict[str, str]] | None:
         guides = data.get("guides") if isinstance(data, dict) else None
         if not isinstance(guides, list):
@@ -206,6 +239,19 @@ direct_child_guide_inputs:
             else:
                 source_type = "book_guide"
                 source_id = f"guide:book:{slug}"
+            markdown = str(guide.get("markdown") or "")
+            if scope_type == "chapter":
+                markdown = GuideCompilerService._truncate_markdown_at_line_boundary(
+                    markdown, GuideCompilerService.MAX_CHAPTER_GUIDE_MARKDOWN_CHARS
+                )
+            elif scope_type == "directory":
+                markdown = GuideCompilerService._truncate_markdown_at_line_boundary(
+                    markdown, GuideCompilerService.MAX_DIRECTORY_GUIDE_MARKDOWN_CHARS
+                )
+            else:
+                markdown = GuideCompilerService._truncate_markdown_at_line_boundary(
+                    markdown, GuideCompilerService.MAX_BOOK_GUIDE_MARKDOWN_CHARS
+                )
             guide_data = {
                 "slug": slug,
                 "title": str(guide.get("title") or f"导读 {index}"),
@@ -215,7 +261,7 @@ direct_child_guide_inputs:
                 "id": f"guide:{filename}",
                 "source_type": source_type,
                 "source_id": source_id,
-                "markdown": str(guide.get("markdown") or ""),
+                "markdown": markdown,
             }
             if guide.get("summary"):
                 guide_data["summary"] = str(guide.get("summary"))
@@ -250,21 +296,70 @@ direct_child_guide_inputs:
         )
 
     @staticmethod
-    async def write_guides(book_uuid: str, guides: list[dict[str, str]]) -> list[dict[str, str]]:
+    async def write_guides(
+        book_uuid: str,
+        guides: list[dict[str, str]],
+        *,
+        merge_manifest: bool = False,
+    ) -> list[dict[str, str]]:
         normalized = GuideCompilerService.normalize_guides({"guides": guides}) or []
         manifest = []
+        manifest_path = BookStorage.guide_manifest_path(book_uuid)
+        if merge_manifest and manifest_path.exists():
+            try:
+                async with aiofiles.open(manifest_path, "r", encoding="utf-8") as handle:
+                    existing = json.loads(await handle.read())
+                if isinstance(existing, list):
+                    manifest = [item for item in existing if isinstance(item, dict)]
+            except (OSError, json.JSONDecodeError):
+                manifest = []
+
+        by_filename = {
+            str(item.get("filename")): index
+            for index, item in enumerate(manifest)
+            if item.get("filename")
+        }
         for guide in normalized:
             path = BookStorage._safe_book_subpath(book_uuid, "book_guides", guide["filename"])
             path.parent.mkdir(parents=True, exist_ok=True)
-            async with aiofiles.open(path, "w", encoding="utf-8") as handle:
+            temp_path = path.with_suffix(path.suffix + ".tmp")
+            async with aiofiles.open(temp_path, "w", encoding="utf-8") as handle:
                 await handle.write(guide["markdown"])
-            manifest.append({key: value for key, value in guide.items() if key != "markdown"})
+            temp_path.replace(path)
+            item = {key: value for key, value in guide.items() if key != "markdown"}
+            existing_index = by_filename.get(guide["filename"])
+            if existing_index is None:
+                by_filename[guide["filename"]] = len(manifest)
+                manifest.append(item)
+            else:
+                manifest[existing_index] = item
 
-        manifest_path = BookStorage.guide_manifest_path(book_uuid)
         manifest_path.parent.mkdir(parents=True, exist_ok=True)
-        async with aiofiles.open(manifest_path, "w", encoding="utf-8") as handle:
+        manifest_temp_path = manifest_path.with_suffix(manifest_path.suffix + ".tmp")
+        async with aiofiles.open(manifest_temp_path, "w", encoding="utf-8") as handle:
             await handle.write(json.dumps(manifest, ensure_ascii=False, indent=2))
+        manifest_temp_path.replace(manifest_path)
         return normalized
+
+    @staticmethod
+    async def _complete_guides(translator, user_prompt: str, system_prompt: str) -> list[dict[str, str]]:
+        last_error: Exception | None = None
+        for attempt in range(GuideCompilerService.MAX_LLM_RETRIES):
+            try:
+                response = await translator.complete(user_prompt, system_prompt, temperature=0.3)
+                guides = GuideCompilerService.extract_guides_json(response)
+                if not guides:
+                    raise ValueError("Guide response did not contain any guides")
+                return guides
+            except LLMConfigurationError:
+                raise
+            except Exception as exc:
+                last_error = exc
+                if attempt < GuideCompilerService.MAX_LLM_RETRIES - 1:
+                    await asyncio.sleep(1 + attempt)
+        raise ValueError(
+            f"Guide generation failed after {GuideCompilerService.MAX_LLM_RETRIES} attempts: {last_error}"
+        ) from last_error
 
     @staticmethod
     def _chapter_index_sort_key(chapter_index: str) -> list[tuple[int, int, str]]:
@@ -336,67 +431,99 @@ direct_child_guide_inputs:
     @staticmethod
     async def generate_top_down_guides(book, chapters, translator) -> list[dict[str, str]]:
         system_prompt = PromptRegistry.get(PromptId.TOP_DOWN_GUIDE).system
-        generated_guides: list[dict[str, str]] = []
+        request_semaphore = asyncio.Semaphore(GuideCompilerService.GUIDE_GENERATION_CONCURRENCY)
+        checkpoint_lock = asyncio.Lock()
 
-        async def generate_node_guides(node: _GuideChapterNode) -> list[dict[str, str]]:
+        async def complete_guides(user_prompt: str) -> list[dict[str, str]]:
+            async with request_semaphore:
+                return await GuideCompilerService._complete_guides(translator, user_prompt, system_prompt)
+
+        async def checkpoint(guides: list[dict[str, str]]) -> None:
+            if not guides:
+                return
+            async with checkpoint_lock:
+                await GuideCompilerService.write_guides(book.uuid, guides, merge_manifest=True)
+
+        async def generate_node_guides(
+            node: _GuideChapterNode,
+        ) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
             if not node.children:
                 if node.chapter is None:
-                    return []
+                    return [], []
                 chapter = node.chapter
-                context = LearningContextService.load_learning_context(book.uuid, chapter.chapter_index)
-                chapter_context = {
-                    "chapter_index": chapter.chapter_index,
-                    "title": chapter.title_zh or chapter.title_en or chapter.chapter_index,
-                    **context,
-                }
+                chapter_context = await ChapterSourceService.chapter_context(
+                    book.uuid,
+                    chapter,
+                )
+                if not chapter_context["body"]:
+                    return [], []
                 user_prompt = GuideCompilerService.build_chapter_guide_prompt(book.title, chapter_context)
-                response = await translator.complete(user_prompt, system_prompt, temperature=0.3)
                 guides = [
                     GuideCompilerService._force_guide_scope(guide, "chapter", str(chapter.chapter_index))
-                    for guide in GuideCompilerService.extract_guides_json(response)
+                    for guide in await complete_guides(user_prompt)
                 ]
-                generated_guides.extend(guides)
-                return guides
+                await checkpoint(guides)
+                return guides, guides
 
             child_guide_inputs: list[dict[str, str]] = []
-            for child in node.children:
-                child_guides = await generate_node_guides(child)
+            subtree_guides: list[dict[str, str]] = []
+            child_results = await asyncio.gather(
+                *(generate_node_guides(child) for child in node.children)
+            )
+            for child, (child_guides, child_subtree_guides) in zip(node.children, child_results):
                 child_guide_inputs.extend(
                     GuideCompilerService._node_guide_input(child, guide)
                     for guide in child_guides
                 )
+                subtree_guides.extend(child_subtree_guides)
 
             directory_context = {
                 "directory_index": node.index,
                 "title": GuideCompilerService._node_title(node),
             }
+            if node.chapter is not None:
+                own_context = await ChapterSourceService.chapter_context(
+                    book.uuid,
+                    node.chapter,
+                )
+                directory_context.update(
+                    {
+                        "body_language": own_context["body_language"],
+                        "body": own_context["body"],
+                    }
+                )
+            if not child_guide_inputs and not directory_context.get("body"):
+                return [], subtree_guides
             user_prompt = GuideCompilerService.build_directory_guide_prompt(
                 book.title,
                 directory_context,
                 child_guide_inputs,
             )
-            response = await translator.complete(user_prompt, system_prompt, temperature=0.3)
             guides = [
                 GuideCompilerService._force_guide_scope(guide, "directory", node.index)
-                for guide in GuideCompilerService.extract_guides_json(response)
+                for guide in await complete_guides(user_prompt)
             ]
-            generated_guides.extend(guides)
-            return guides
+            await checkpoint(guides)
+            return guides, [*subtree_guides, *guides]
 
         roots = GuideCompilerService._build_chapter_tree(chapters)
         top_level_guide_inputs: list[dict[str, str]] = []
-        for root in roots:
-            root_guides = await generate_node_guides(root)
+        generated_guides: list[dict[str, str]] = []
+        root_results = await asyncio.gather(*(generate_node_guides(root) for root in roots))
+        for root, (root_guides, root_subtree_guides) in zip(roots, root_results):
             top_level_guide_inputs.extend(
                 GuideCompilerService._node_guide_input(root, guide)
                 for guide in root_guides
             )
+            generated_guides.extend(root_subtree_guides)
 
+        if not top_level_guide_inputs:
+            return await GuideCompilerService.write_guides(book.uuid, generated_guides)
         user_prompt = GuideCompilerService.build_book_guide_prompt(book.title, top_level_guide_inputs)
-        response = await translator.complete(user_prompt, system_prompt, temperature=0.3)
         book_guides = [
             GuideCompilerService._force_guide_scope(guide, "book", "book")
-            for guide in GuideCompilerService.extract_guides_json(response)
+            for guide in await complete_guides(user_prompt)
         ]
+        await checkpoint(book_guides)
         guides = [*generated_guides, *book_guides]
         return await GuideCompilerService.write_guides(book.uuid, guides)

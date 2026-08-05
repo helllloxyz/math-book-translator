@@ -24,16 +24,6 @@ const guideItem = {
   source_id: 'guide:book:reading-path',
   source_title: 'Top-down reading path'
 }
-const learningItem = {
-  type: 'learning',
-  title: 'Orientations and Atlases',
-  chapter_id: 42,
-  chapter_index: '21.5',
-  source_type: 'chapter_learning',
-  source_id: 'learning:42',
-  source_title: 'Orientations and Atlases'
-}
-
 const chapterCard = { questionSummary: 'Why must the determinant be positive?' }
 const guideCard = { questionSummary: 'How should I read this guide?' }
 
@@ -68,22 +58,6 @@ assert.deepEqual(
   },
   'guide metadata should keep book and guide identity without a chapter id'
 )
-assert.deepEqual(
-  buildConversationMetadata(book, learningItem),
-  {
-    bookId: 7,
-    bookTitle: 'Foundations of Differential Geometry',
-    readerType: 'learning',
-    sourceType: 'chapter_learning',
-    sourceId: 'learning:42',
-    sourceTitle: 'Orientations and Atlases',
-    chapterId: 42,
-    chapterIndex: '21.5',
-    guideId: ''
-  },
-  'learning metadata should reuse the paired chapter identity'
-)
-
 assert.equal(
   buildConversationDocumentTitle(chapterCard, buildConversationMetadata(book, chapterItem)),
   '21.5 Why must the determinant be positive?'

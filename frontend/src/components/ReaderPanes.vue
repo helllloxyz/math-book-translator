@@ -7,7 +7,7 @@
     <section v-else-if="!currentItem" class="center-state reader-empty-state">
       <span aria-hidden="true">§</span>
       <h2>选择一个章节开始阅读</h2>
-      <p>目录中的章节、学习摘要和导读会在这里展开。</p>
+      <p>目录中的章节和导读会在这里展开。</p>
     </section>
 
     <template v-else-if="effectiveViewMode === 'single'">
@@ -156,7 +156,7 @@ const effectiveViewMode = computed(() => {
 
 const isGuideDual = computed(() => effectiveViewMode.value === 'guide-dual')
 const isSelectedGuideDual = computed(() => (
-  isGuideDual.value && ['guide', 'learning'].includes(props.currentItem?.type)
+  isGuideDual.value && props.currentItem?.type === 'guide'
 ))
 
 const translatedOrSourceHtml = computed(() => {

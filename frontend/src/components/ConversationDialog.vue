@@ -34,11 +34,6 @@
           Delete
         </button>
 
-        <section v-if="isChapterNote && displayedChapterSummary" class="chapter-context">
-          <h3>Chapter context</h3>
-          <div class="latex-content" v-html="renderMessage(displayedChapterSummary)"></div>
-        </section>
-
       </aside>
 
       <div class="dialog-panel">
@@ -100,11 +95,6 @@
 
         <div class="dialog-content">
           <section ref="messagesRef" class="message-list latex-content" :class="{ empty: !messages.length && !selectedText }">
-            <section v-if="standalone && isChapterNote && displayedChapterSummary" class="chapter-context standalone-context-card">
-              <h3>Chapter context</h3>
-              <div class="latex-content" v-html="renderMessage(displayedChapterSummary)"></div>
-            </section>
-
             <details
               v-if="isSelectionNote && selectedText"
               class="question-block latex-content question-context-details"
@@ -150,7 +140,11 @@
           </section>
 
           <form class="dialog-input" @submit.prevent="submitPrompt">
-            <div class="dialog-toolbar" aria-label="Response style">
+            <p v-if="isQuiz" class="quiz-answer-guidance">
+              <strong>{{ quizTypeLabel }}</strong>
+              <span>{{ answerGuidance }}</span>
+            </p>
+            <div v-if="!isQuiz" class="dialog-toolbar" aria-label="Response style">
               <button
                 v-for="style in responseStyles"
                 :key="style.id"
@@ -219,10 +213,6 @@ const props = defineProps({
     type: Object,
     default: null
   },
-  chapterSummary: {
-    type: String,
-    default: ''
-  },
   metadataInfo: {
     type: Object,
     default: null
@@ -248,7 +238,6 @@ const canGoSource = computed(() => Boolean(props.metadataInfo?.bookId || props.c
 const canDelete = computed(() => Boolean(props.card?.noteId))
 
 const selectedText = computed(() => props.card?.selectedText || props.card?.selected_text || '')
-const displayedChapterSummary = computed(() => props.card?.chapterSummary || props.card?.chapter_summary || props.chapterSummary)
 
 const messages = computed(() => {
   if (!props.card) return []
@@ -256,7 +245,10 @@ const messages = computed(() => {
   return deserializeMessages(props.card.noteContent || props.card.note_content || '')
 })
 
-const dialogTitle = computed(() => isQuiz.value ? 'Quiz' : 'Note')
+const dialogTitle = computed(() => {
+  if (!isQuiz.value) return 'Note'
+  return props.card?.quizMode === 'book' ? '全书复习 Quiz' : '章节讲解 Quiz'
+})
 const modeClass = computed(() => isQuiz.value ? 'quiz-mode' : 'note-mode')
 const fallbackTitle = computed(() => isQuiz.value ? 'Quiz dialogue' : 'Conversation')
 
@@ -270,8 +262,7 @@ const modelLabel = computed(() => props.card?.model || props.card?.modelName || 
 const sourceCount = computed(() => {
   return [
     props.card?.sourceTitle || props.metadataInfo?.sourceTitle,
-    selectedText.value,
-    displayedChapterSummary.value
+    selectedText.value
   ].filter(Boolean).length
 })
 
@@ -279,7 +270,7 @@ const suggestedQuestionsFor = (message) => {
   if (message.role !== 'assistant') return []
   const sourceTitle = props.card?.sourceTitle || props.metadataInfo?.sourceTitle || '这一节'
   if (isQuiz.value) {
-    return ['我的答案缺了哪一步？', '能给一个更短的解法吗？', '这题考察哪个定义？']
+    return []
   }
   if (isSelectionNote.value) {
     return ['这段话的关键假设是什么？', '能用一个例子说明吗？', '它和前面的定义如何连接？']
@@ -320,10 +311,15 @@ const metadataFields = computed(() => {
 })
 
 const placeholder = computed(() => {
-  if (isQuiz.value) return 'Type your answer...'
+  if (isQuiz.value) return '用自己的话讲讲，不必输入公式…'
   if (isChapterNote.value) return 'Ask about this chapter...'
   return 'Ask about this note...'
 })
+
+const quizTypeLabel = computed(() => props.card?.questionTypeLabel || '自然语言讲解')
+const answerGuidance = computed(() => (
+  props.card?.answerGuidance || '请像向同学讲解一样回答；重点说清理解和思路，不要求输入公式。'
+))
 
 const emptyMessage = computed(() => {
   return 'Ask a question to continue this note.'
@@ -1238,6 +1234,22 @@ onUnmounted(() => {
 .quiz-mode .dialog-input {
   border-top-color: var(--dialog-border);
   background: #ffffff;
+}
+
+.quiz-answer-guidance {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  margin: 0 0 0.55rem;
+  color: #39635a;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.quiz-answer-guidance strong {
+  flex: 0 0 auto;
+  color: #085041;
+  font-weight: 650;
 }
 
 .quiz-mode .dialog-input textarea:focus {

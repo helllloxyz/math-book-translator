@@ -27,7 +27,10 @@ const normalizeQuizMetadata = (metadata = {}) => {
                 : [],
         rubric: metadata.rubric || metadata.evaluation_rubric || {},
         personalizationContext: metadata.personalizationContext || metadata.personalization_context || '',
-        questionText: metadata.questionText || metadata.question_text || ''
+        questionText: metadata.questionText || metadata.question_text || '',
+        quizMode: metadata.quizMode || metadata.quiz_mode || 'chapter',
+        questionTypeLabel: metadata.questionTypeLabel || metadata.question_type_label || '',
+        answerGuidance: metadata.answerGuidance || metadata.answer_guidance || ''
     }
 }
 
@@ -47,7 +50,10 @@ const serializeCardMessages = (messages, quizMetadata = null) => {
             expectedPoints: Array.isArray(quizMetadata.expectedPoints) ? quizMetadata.expectedPoints : [],
             rubric: quizMetadata.rubric || {},
             personalizationContext: quizMetadata.personalizationContext || '',
-            questionText: quizMetadata.questionText || ''
+            questionText: quizMetadata.questionText || '',
+            quizMode: quizMetadata.quizMode || 'chapter',
+            questionTypeLabel: quizMetadata.questionTypeLabel || '',
+            answerGuidance: quizMetadata.answerGuidance || ''
         }
     })
 }
@@ -74,7 +80,6 @@ export function useLearningCards() {
     const subjectPrefix = (chapter) => chapter.readerType === 'chapter' || !chapter.readerType ? '章节' : '内容'
     const cardScopeLabel = (type, readerType = 'chapter') => {
         if (readerType === 'guide') return 'Guide'
-        if (readerType === 'learning') return 'Learning'
         if (type === 'selection') return '片段'
         if (type === 'chapter') return '本章'
         if (type === 'quiz') return 'Quiz'
@@ -119,7 +124,6 @@ export function useLearningCards() {
             sourceId: note.source_id || chapter.sourceId || chapter.source_id || '',
             sourceTitle: note.source_title || sourceTitle,
             selectedText: note.selected_text || '',
-            chapterSummary: note.chapterSummary || '',
             contextScope: note.contextScope || note.context_scope || (type === 'selection' ? 'selection' : 'chapter'),
             initialPrompt: note.initialPrompt || note.initial_prompt || '',
             messages,
@@ -134,6 +138,9 @@ export function useLearningCards() {
             card.rubric = quizMetadata.rubric
             card.personalizationContext = quizMetadata.personalizationContext
             card.questionText = quizMetadata.questionText || messages.find(message => message.role === 'assistant')?.content || ''
+            card.quizMode = quizMetadata.quizMode
+            card.questionTypeLabel = quizMetadata.questionTypeLabel
+            card.answerGuidance = quizMetadata.answerGuidance
         }
         return card
     }
@@ -155,7 +162,6 @@ export function useLearningCards() {
             selected_text: '',
             note_content: '',
             title: 'New chapter note',
-            chapterSummary: chapter.chapterSummary || '',
             contextScope: 'chapter',
             initialPrompt: options.initialPrompt || '',
             source_type: chapter.sourceType || chapter.source_type,
@@ -196,7 +202,10 @@ export function useLearningCards() {
             expectedPoints: question?.expected_points || [],
             rubric: question?.evaluation_rubric || {},
             personalizationContext: personalizationContext || '',
-            questionText
+            questionText,
+            quizMode: question?.quiz_mode || 'chapter',
+            questionTypeLabel: question?.question_type_label || '',
+            answerGuidance: question?.answer_guidance || ''
         }
         const card = toAskCard({
             id: null,
@@ -215,7 +224,10 @@ export function useLearningCards() {
         card.rubric = quizMetadata.rubric
         card.personalizationContext = quizMetadata.personalizationContext
         card.questionText = questionText
-        card.questionSummary = `${questionType}：${questionText.replace(/\s+/g, ' ').slice(0, 60)}`
+        card.quizMode = quizMetadata.quizMode
+        card.questionTypeLabel = quizMetadata.questionTypeLabel
+        card.answerGuidance = quizMetadata.answerGuidance
+        card.questionSummary = `${quizMetadata.questionTypeLabel || questionType}：${questionText.replace(/\s+/g, ' ').slice(0, 60)}`
         card.messages = [{ role: 'assistant', content: questionText }]
         card.noteContent = serializeCardMessages(card.messages, card)
         askCards.value.unshift(card)

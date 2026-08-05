@@ -37,14 +37,8 @@ export const findChapterGuideLeaf = (nodes = [], chapterIndex) => {
     leaf.type === 'guide' &&
     String(leaf.scope_id || '').trim() === normalizedIndex
   ))
-  const scopedLearning = leaves.filter((leaf) => (
-    leaf.type === 'learning' &&
-    String(leaf.chapter_index || leaf.chapterIndex || '').trim() === normalizedIndex
-  ))
-
   return scopedGuides.find((leaf) => leaf.scope_type === 'chapter')
     || scopedGuides.find((leaf) => leaf.scope_type === 'directory')
-    || scopedLearning[0]
     || null
 }
 

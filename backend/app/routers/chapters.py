@@ -7,7 +7,6 @@ from app.models.base import get_db
 from app.models.schema import Book, Chapter, LatexRepairApplyRequest, LatexRepairSuggestRequest
 from app.services.latex_repair_service import LatexRepairService
 from app.services.book_storage import BookStorage
-from app.services.learning_context_service import LearningContextService
 from app.services.translator import LLMConfigurationError
 
 router = APIRouter()
@@ -81,9 +80,3 @@ async def apply_latex_repair(
         "content": updated,
         "content_target": LatexRepairService.normalize_content_target(request.content_target),
     }
-
-
-@router.get("/chapters/{chapter_id}/learning")
-async def get_chapter_learning(chapter_id: int, db: AsyncSession = Depends(get_db)):
-    chapter, book_uuid = await chapter_with_book_uuid(chapter_id, db)
-    return LearningContextService.load_learning_context(book_uuid, chapter.chapter_index)

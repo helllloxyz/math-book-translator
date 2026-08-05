@@ -4,20 +4,22 @@ import random
 from datetime import datetime
 from typing import Any
 
-import aiofiles
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.schema import Book, Chapter, QuizAttempt, QuizQuestion
-from app.services.book_storage import BookStorage
+from app.services.chapter_source_service import ChapterSourceService
 from app.services.guide_service import GuideService
-from app.services.learning_context_service import LearningContextService
 from app.services.learning_profile_service import LearningProfileService
 from app.services.llm_json import extract_json_candidate
 from app.services.quiz_skill_registry import (
+    BOOK_QUIZ_MODE,
+    CHAPTER_QUIZ_MODE,
     QUIZ_SKILLS,
+    canonical_question_type,
     get_quiz_skill,
     is_valid_question_type,
+    normalize_quiz_mode,
     question_type_weights,
 )
 from app.services.translator import TranslatorService
@@ -26,19 +28,20 @@ logger = logging.getLogger("app.quiz_service")
 
 
 class QuizService:
-    MAX_CONTEXT_CHARS = 14000
-    MAX_EXCERPT_CHARS = 4500
     CHAPTER_BANK_SPARSE_THRESHOLD = 3
     CHAPTER_BANK_BATCH_SIZE = 3
 
     @staticmethod
     def question_to_dict(question: QuizQuestion) -> dict[str, Any]:
+        skill = get_quiz_skill(question.question_type)
         return {
             "id": question.id,
             "book_id": question.book_id,
             "chapter_id": question.chapter_id,
+            "quiz_mode": normalize_quiz_mode(getattr(question, "quiz_mode", None)),
             "source": question.source or "generated",
             "question_type": question.question_type,
+            "question_type_label": skill.label,
             "difficulty": question.difficulty or "medium",
             "target_concepts": question.target_concepts or [],
             "question_text": question.question_text,
@@ -47,6 +50,7 @@ class QuizService:
             "context_refs": question.context_refs or [],
             "evaluation_rubric": question.evaluation_rubric or {},
             "followup_strategy": question.followup_strategy or "",
+            "answer_guidance": skill.answer_guidance,
         }
 
     @staticmethod
@@ -58,13 +62,6 @@ class QuizService:
     async def _book_or_none(book_id: int, db: AsyncSession) -> Book | None:
         result = await db.execute(select(Book).where(Book.id == book_id))
         return result.scalar_one_or_none()
-
-    @staticmethod
-    def _truncate(text: str, limit: int) -> str:
-        normalized = str(text or "").strip()
-        if len(normalized) <= limit:
-            return normalized
-        return normalized[:limit].rstrip() + "\n\n[truncated]"
 
     @staticmethod
     def weighted_random_question_type() -> str:
@@ -98,13 +95,6 @@ class QuizService:
         return ordered
 
     @staticmethod
-    async def _read_text(path) -> str:
-        if not path.exists():
-            return ""
-        async with aiofiles.open(path, "r", encoding="utf-8") as handle:
-            return await handle.read()
-
-    @staticmethod
     async def _book_guide_text(book_uuid: str) -> str:
         guides = await GuideService.list_guides(book_uuid)
         parts = []
@@ -116,7 +106,7 @@ class QuizService:
             except FileNotFoundError:
                 continue
             parts.append(data.get("content", ""))
-        return QuizService._truncate("\n\n".join(parts), 4000)
+        return "\n\n".join(parts).strip()
 
     @staticmethod
     async def _chapter_guide_text(book_uuid: str, chapter_index: str) -> str:
@@ -130,60 +120,58 @@ class QuizService:
             except FileNotFoundError:
                 continue
             parts.append(data.get("content", ""))
-        return QuizService._truncate("\n\n".join(parts), 3500)
+        return "\n\n".join(parts).strip()
 
     @staticmethod
-    def _learning_context_markdown(book_uuid: str, chapter: Chapter) -> str:
-        context = LearningContextService.load_learning_context(book_uuid, chapter.chapter_index)
-        parts = [
-            f"Summary: {context.get('summary', '')}",
-            "Concepts:",
-            *[
-                f"- {item.get('name', '')}: {item.get('description', '')}"
-                for item in context.get("concepts", [])
-                if isinstance(item, dict)
-            ],
-            "Key theorems:",
-            *[
-                f"- {item.get('name', '')}: {item.get('statement', item.get('description', ''))}"
-                for item in context.get("key_theorems", [])
-                if isinstance(item, dict)
-            ],
-            "Dependencies:",
-            *[f"- {item}" for item in context.get("dependencies", [])],
-        ]
-        return QuizService._truncate("\n".join(parts), 3500)
-
-    @staticmethod
-    async def build_generation_context(book: Book, chapter: Chapter | None, question_type: str) -> str:
+    async def build_generation_context(
+        book: Book,
+        chapter: Chapter | None,
+        question_type: str,
+        quiz_mode: str = CHAPTER_QUIZ_MODE,
+    ) -> str:
         skill = get_quiz_skill(question_type)
+        mode = normalize_quiz_mode(quiz_mode)
+        mode_goal = (
+            "This is a Book Quiz: diagnose the learner's selected weak point in the book. "
+            "Use the personalization context as a targeting instruction, but do not reveal private profile evidence in the question."
+            if mode == BOOK_QUIZ_MODE
+            else (
+                "This is a Chapter Quiz: ask one focused teach-back question about the current chapter. "
+                "The chapter body is authoritative; guides only provide structural orientation."
+            )
+        )
         parts = [
             f"Book: {book.title}",
+            f"Quiz mode: {mode}",
+            f"Mode goal: {mode_goal}",
             f"Question type: {skill.question_type}",
             f"Goal: {skill.goal}",
             f"Required context: {', '.join(skill.required_context)}",
-            f"Question style: {skill.question_style}",
+            f"Type-specific generation instruction: {skill.generation_prompt}",
+            f"How the learner should answer: {skill.answer_guidance}",
         ]
         if chapter:
             parts.append(
                 f"Chapter: {chapter.chapter_index} {chapter.title_zh or chapter.title_en or ''}".strip()
             )
-            raw_text = await QuizService._read_text(BookStorage.raw_chapter_path(book.uuid, chapter.chapter_index))
-            translated_text = await QuizService._read_text(
-                BookStorage.translated_chapter_path(book.uuid, chapter.chapter_index)
+            chapter_source = await ChapterSourceService.chapter_context(
+                book.uuid,
+                chapter,
             )
             parts.extend(
                 [
-                    "Learning context:",
-                    QuizService._learning_context_markdown(book.uuid, chapter),
+                    (
+                        "Chapter body (direct source"
+                        f", language={chapter_source['body_language']}"
+                        "):"
+                    ),
+                    chapter_source["body"],
                     "Chapter guide:",
                     await QuizService._chapter_guide_text(book.uuid, chapter.chapter_index),
-                    "Chapter excerpt:",
-                    QuizService._truncate(translated_text or raw_text, QuizService.MAX_EXCERPT_CHARS),
                 ]
             )
         parts.extend(["Book guide:", await QuizService._book_guide_text(book.uuid)])
-        return QuizService._truncate("\n\n".join(parts), QuizService.MAX_CONTEXT_CHARS)
+        return "\n\n".join(parts).strip()
 
     @staticmethod
     def normalize_question_data(
@@ -192,12 +180,16 @@ class QuizService:
         book_id: int,
         chapter_id: int | None,
         question_type: str,
+        quiz_mode: str,
         source: str,
     ) -> dict[str, Any]:
         skill = get_quiz_skill(question_type)
+        mode = normalize_quiz_mode(quiz_mode)
         expected_points = data.get("expected_points") or data.get("expected_answer_points") or []
         if isinstance(expected_points, str):
             expected_points = [expected_points]
+        if not expected_points:
+            expected_points = list(skill.expected_points)
         target_concepts = data.get("target_concepts") or []
         if isinstance(target_concepts, str):
             target_concepts = [target_concepts]
@@ -206,10 +198,11 @@ class QuizService:
             common_mistakes = [common_mistakes]
         question_text = str(data.get("question_text") or data.get("question") or "").strip()
         if not question_text:
-            question_text = "Explain the central idea of this chapter and name one condition that is required."
+            question_text = f"请围绕本章完成一次「{skill.label}」：{skill.answer_guidance}"
         return {
             "book_id": book_id,
             "chapter_id": chapter_id,
+            "quiz_mode": mode,
             "source": source,
             "question_type": skill.question_type,
             "difficulty": str(data.get("difficulty") or "medium"),
@@ -231,31 +224,47 @@ class QuizService:
         chapter_id: int | None,
         chapter_title: str,
         question_type: str,
+        quiz_mode: str,
         source: str,
         personalization_context: str | None = None,
     ) -> dict[str, Any]:
         skill = get_quiz_skill(question_type)
-        personalization_hint = QuizService._truncate(personalization_context or "", 600)
-        question_text = (
-            f"围绕「{chapter_title or '本章'}」，并结合这个个性化目标「{personalization_hint}」，"
-            f"请回答：{skill.question_style} 请写出关键定义/条件，并说明它在推理中的作用。"
-            if personalization_hint
-            else (
-                f"围绕「{chapter_title or '本章'}」，请回答：{skill.question_style} "
-                "请写出关键定义/条件，并说明它在推理中的作用。"
-            )
+        personalization_hint = str(personalization_context or "").strip()
+        target_concept = next(
+            (
+                line.split(":", 1)[1].strip()
+                for line in personalization_hint.splitlines()
+                if line.lower().startswith("target concept:") and ":" in line
+            ),
+            "",
         )
+        target_hint = f"，重点围绕「{target_concept}」" if target_concept else ""
+        fallback_questions = {
+            "concept_explain": (
+                f"假设你要向刚读到「{chapter_title or '本章'}」的同学讲解其中最核心的一个概念{target_hint}。"
+                "它描述什么、最关键的性质是什么？请再用一个例子或直观后果帮助对方理解。"
+            ),
+            "theorem_understanding": (
+                f"请选择「{chapter_title or '本章'}」中的一个关键定理或结论{target_hint}，用自己的话说明："
+                "它需要哪些关键条件、保证了什么，以及其中一个条件为什么不能随便删掉。"
+            ),
+            "proof_strategy": (
+                f"请选择「{chapter_title or '本章'}」中的一个重要证明{target_hint}，像口头讲解一样说出证明路线："
+                "从哪里出发，关键转折是什么，它怎样把问题推进到结论？不用写完整公式推导。"
+            ),
+            "concept_connection": (
+                f"请选择「{chapter_title or '本章'}」中两个有直接联系的概念或结果{target_hint}。"
+                "请分别说明它们的角色，再解释两者怎样连接、为什么要放在一起理解。"
+            ),
+        }
+        question_text = fallback_questions[skill.question_type]
         data = {
             "question_text": question_text,
-            "target_concepts": [item for item in [chapter_title, personalization_hint] if item],
-            "expected_points": [
-                "准确指出相关定义或结论",
-                "说明至少一个必要条件",
-                "解释该条件如何支持推理或应用",
-            ],
+            "target_concepts": [item for item in [chapter_title, target_concept] if item],
+            "expected_points": list(skill.expected_points),
             "common_mistakes": [
-                "只复述结论，没有说明条件",
-                "把相近概念混为一谈",
+                "只重复书中的结论，没有解释为什么",
+                "堆砌术语或公式，却没有讲清逻辑关系",
             ],
         }
         return QuizService.normalize_question_data(
@@ -263,6 +272,7 @@ class QuizService:
             book_id=book_id,
             chapter_id=chapter_id,
             question_type=question_type,
+            quiz_mode=quiz_mode,
             source=source,
         )
 
@@ -272,29 +282,46 @@ class QuizService:
         book: Book,
         chapter: Chapter | None,
         question_type: str,
+        quiz_mode: str,
         db: AsyncSession,
         source: str = "generated",
         personalization_context: str | None = None,
     ) -> QuizQuestion:
         skill = get_quiz_skill(question_type)
-        context = await QuizService.build_generation_context(book, chapter, skill.question_type)
+        mode = normalize_quiz_mode(quiz_mode)
+        context = await QuizService.build_generation_context(
+            book,
+            chapter,
+            skill.question_type,
+            mode,
+        )
         if personalization_context:
-            context = QuizService._truncate(
-                f"{context}\n\nPersonalization context:\n{personalization_context}",
-                QuizService.MAX_CONTEXT_CHARS,
-            )
+            context = f"{context}\n\nPersonalization context:\n{personalization_context}"
 
         translator = TranslatorService(task="quiz")
         normalized: dict[str, Any] | None = None
         if getattr(translator, "api_key", None):
             system_prompt = (
-                "You generate one structured mathematics quiz question. Return strictly valid JSON with keys: "
+                "You design one Feynman-style teach-back question for a reader of a serious mathematics book. "
+                "The learner must be able to answer in ordinary natural language, typically in 2-6 sentences. "
+                "Never require typing a formula, carrying out a calculation, filling a missing equation, reproducing notation, "
+                "or writing a complete formal proof. You may ask what an existing formula means or how a proof works. "
+                "Use only claims actually supported by the supplied source. Ask one question with one coherent learning target, "
+                "write the question in Chinese, and do not include the answer or expose learning-profile evidence. "
+                "Return strictly valid JSON with keys: "
                 "question_text, difficulty, target_concepts, expected_points, common_mistakes, context_refs, "
-                "evaluation_rubric, followup_strategy. Do not invent a question_type. "
-                "When personalization context is provided, the question must directly use that context."
+                "evaluation_rubric, followup_strategy. expected_points must describe semantic ideas, not exact keywords. "
+                "context_refs must identify the source section or named result that supports the question. "
+                "When personalization context is provided, target that concept or weakness without mentioning the profile itself."
             )
             user_prompt = (
-                f"{context}\n\nGenerate exactly one {skill.question_type} question using the requested style and rubric."
+                f"{context}\n\n"
+                f"Generate exactly one {skill.label} ({skill.question_type}) question.\n"
+                f"Type-specific instruction: {skill.generation_prompt}\n"
+                f"Evaluation focus: {skill.evaluation_prompt}\n"
+                f"Default semantic answer points: {json.dumps(skill.expected_points, ensure_ascii=False)}\n"
+                f"Default rubric: {json.dumps(skill.evaluation_rubric, ensure_ascii=False)}\n"
+                f"Follow-up rule: {skill.next_step_rule}"
             )
             try:
                 raw = await translator.complete(user_prompt, system_prompt, temperature=0.4)
@@ -304,6 +331,7 @@ class QuizService:
                     book_id=book.id,
                     chapter_id=chapter.id if chapter else None,
                     question_type=skill.question_type,
+                    quiz_mode=mode,
                     source=source,
                 )
             except Exception as exc:
@@ -315,6 +343,7 @@ class QuizService:
                 chapter_id=chapter.id if chapter else None,
                 chapter_title=chapter.title_zh or chapter.title_en or chapter.chapter_index if chapter else book.title,
                 question_type=skill.question_type,
+                quiz_mode=mode,
                 source=source,
                 personalization_context=personalization_context,
             )
@@ -331,15 +360,18 @@ class QuizService:
         book_id: int,
         chapter_id: int | None,
         question_type: str | None,
+        quiz_mode: str,
         db: AsyncSession,
     ) -> QuizQuestion | None:
+        mode = normalize_quiz_mode(quiz_mode)
         query = select(QuizQuestion).where(QuizQuestion.book_id == book_id)
         if chapter_id is None:
             query = query.where(QuizQuestion.chapter_id.is_(None))
         else:
             query = query.where(QuizQuestion.chapter_id == chapter_id)
+        query = query.where(QuizQuestion.quiz_mode == mode)
         if question_type:
-            query = query.where(QuizQuestion.question_type == question_type)
+            query = query.where(QuizQuestion.question_type == canonical_question_type(question_type))
         result = await db.execute(
             query.order_by(
                 QuizQuestion.attempts_count.asc(),
@@ -355,6 +387,7 @@ class QuizService:
             select(func.count(QuizQuestion.id)).where(
                 QuizQuestion.book_id == book_id,
                 QuizQuestion.chapter_id == chapter_id,
+                QuizQuestion.quiz_mode == CHAPTER_QUIZ_MODE,
             )
         )
         return int(result.scalar_one() or 0)
@@ -373,6 +406,7 @@ class QuizService:
                 book_id=book.id,
                 chapter_id=chapter.id,
                 question_type=question_type,
+                quiz_mode=CHAPTER_QUIZ_MODE,
                 db=db,
             )
             if existing:
@@ -383,6 +417,7 @@ class QuizService:
                         book=book,
                         chapter=chapter,
                         question_type=question_type,
+                        quiz_mode=CHAPTER_QUIZ_MODE,
                         db=db,
                         source="runtime_batch",
                     )
@@ -401,27 +436,34 @@ class QuizService:
     async def next_chapter_question(
         chapter_id: int,
         *,
+        quiz_mode: str,
         question_type: str | None,
         personalization_context: str | None,
         db: AsyncSession,
     ) -> QuizQuestion | None:
+        mode = normalize_quiz_mode(quiz_mode)
         chapter = await QuizService._chapter_or_none(chapter_id, db)
         if not chapter:
             return None
         if question_type and not is_valid_question_type(question_type):
             raise ValueError(f"Unsupported quiz question type: {question_type}")
-        selected_type = question_type or QuizService.weighted_random_question_type()
+        selected_type = (
+            canonical_question_type(question_type)
+            if question_type
+            else QuizService.weighted_random_question_type()
+        )
         book = await QuizService._book_or_none(chapter.book_id, db)
         if not book:
             return None
 
-        if personalization_context:
+        if mode == BOOK_QUIZ_MODE:
             question = await QuizService.generate_question(
                 book=book,
                 chapter=chapter,
                 question_type=selected_type,
+                quiz_mode=mode,
                 db=db,
-                source="personalized",
+                source="book_adaptive",
                 personalization_context=personalization_context,
             )
         else:
@@ -444,6 +486,7 @@ class QuizService:
                         book_id=chapter.book_id,
                         chapter_id=chapter.id,
                         question_type=selected_type,
+                        quiz_mode=mode,
                         db=db,
                     )
                 if question is None and not question_type:
@@ -453,6 +496,7 @@ class QuizService:
                     book_id=chapter.book_id,
                     chapter_id=chapter.id,
                     question_type=question_type or selected_type,
+                    quiz_mode=mode,
                     db=db,
                 )
         if question is None:
@@ -460,6 +504,7 @@ class QuizService:
                 book=book,
                 chapter=chapter,
                 question_type=selected_type,
+                quiz_mode=mode,
                 db=db,
                 source="runtime",
                 personalization_context=personalization_context,
@@ -471,31 +516,27 @@ class QuizService:
         return question
 
     @staticmethod
+    def _default_followup_question(question: QuizQuestion) -> str:
+        skill = get_quiz_skill(question.question_type)
+        fallback_followups = {
+            "concept_explain": "请再挑一个你认为最关键的性质，说明缺少它会发生什么。",
+            "theorem_understanding": "请再选一个关键条件，说明它在结论中起什么作用。",
+            "proof_strategy": "请再说明证明中最关键的转折，以及这一步为什么能推进到结论。",
+            "concept_connection": "请再说清两者关系的方向：哪一边依赖或服务于哪一边？",
+        }
+        return fallback_followups[skill.question_type]
+
+    @staticmethod
     def _local_evaluation(question: QuizQuestion, answer_text: str) -> dict[str, Any]:
-        expected_points = question.expected_points or []
-        normalized_answer = answer_text.casefold()
-        matched = [
-            point
-            for point in expected_points
-            if any(token and token in normalized_answer for token in str(point).casefold().split()[:8])
-        ]
-        if expected_points and len(matched) >= max(1, len(expected_points) - 1):
-            status = "completed"
-        elif matched or len(answer_text.strip()) >= 80:
-            status = "partial"
-        else:
-            status = "wrong"
-        missing = [point for point in expected_points if point not in matched]
         return {
-            "evaluation_status": status,
-            "score": {"completed": 1.0, "partial": 0.55, "wrong": 0.0}[status],
-            "missing_points": missing,
+            "evaluation_status": "partial",
+            "score": 0.5,
+            "missing_points": [],
             "feedback_text": (
-                "本地评估：答案已覆盖主要要点。"
-                if status == "completed"
-                else "本地评估：答案还需要更明确地连接定义、条件和推理步骤。"
+                "已记录你的讲解。当前没有可用的模型，系统无法仅凭关键词可靠判断数学含义，"
+                "因此暂不把这次回答判成正确或错误。"
             ),
-            "followup_text": question.followup_strategy or "请补充一个关键条件，并说明为什么它必要。",
+            "followup_text": QuizService._default_followup_question(question),
         }
 
     @staticmethod
@@ -508,19 +549,36 @@ class QuizService:
             missing_points = [missing_points]
         score = data.get("score")
         try:
-            score = float(score)
+            score = max(0.0, min(1.0, float(score)))
         except (TypeError, ValueError):
             score = {"completed": 1.0, "partial": 0.55, "wrong": 0.0}[status]
+        fallback_feedback = {
+            "completed": "你的讲解已经覆盖了这道题的核心逻辑。",
+            "partial": "你的讲解方向基本正确，但还有一个关键连接需要说清。",
+            "wrong": "当前讲解的核心方向需要重新检查，请先从题目中的对象和条件开始。",
+        }
         return {
             "evaluation_status": status,
             "score": score,
             "missing_points": [str(point) for point in missing_points if str(point).strip()],
-            "feedback_text": str(data.get("feedback_text") or data.get("feedback") or ""),
-            "followup_text": str(data.get("followup_text") or data.get("followup") or question.followup_strategy or ""),
+            "feedback_text": str(
+                data.get("feedback_text") or data.get("feedback") or fallback_feedback[status]
+            ),
+            "followup_text": str(
+                data.get("followup_text")
+                or data.get("followup")
+                or QuizService._default_followup_question(question)
+            ),
         }
 
     @staticmethod
-    async def submit_attempt(question_id: int, answer_text: str, db: AsyncSession) -> dict[str, Any] | None:
+    async def submit_attempt(
+        question_id: int,
+        answer_text: str,
+        db: AsyncSession,
+        *,
+        conversation_history: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any] | None:
         result = await db.execute(select(QuizQuestion).where(QuizQuestion.id == question_id))
         question = result.scalar_one_or_none()
         if not question:
@@ -529,18 +587,33 @@ class QuizService:
         translator = TranslatorService(task="quiz")
         evaluation = None
         if getattr(translator, "api_key", None):
+            skill = get_quiz_skill(question.question_type)
             system_prompt = (
-                "You evaluate a math quiz answer. Return strictly valid JSON with keys: "
+                "You are a Feynman-style mathematics coach evaluating a learner's teach-back explanation. "
+                "Judge mathematical meaning, not keyword overlap or notation. Accept clear everyday language, analogies, "
+                "and omitted algebraic detail when the reasoning is sound. Never penalize the learner for not typing formulas. "
+                "Use the full conversation history when a later answer is responding to your earlier follow-up. "
+                "Be demanding about reversed implications, missing hypotheses, circular proof plans, and misleading analogies. "
+                "Write feedback in concise Chinese: first name one thing the learner understood, then identify at most one "
+                "most important gap or correction. Ask exactly one short follow-up that helps the learner repair the explanation; "
+                "do not dump the full standard answer. Return strictly valid JSON with keys: "
                 "evaluation_status (completed|partial|wrong), score, missing_points, feedback_text, followup_text. "
-                "Use the rubric and expected points, preserve math notation, and keep feedback concise."
+                "Use completed only when the core explanation is genuinely sound, partial when the main direction is right "
+                "but one important link is missing, and wrong when the central idea or logical direction is incorrect."
             )
             user_prompt = json.dumps(
                 {
+                    "quiz_mode": normalize_quiz_mode(getattr(question, "quiz_mode", None)),
                     "question_text": question.question_text,
                     "question_type": question.question_type,
+                    "question_type_label": skill.label,
+                    "type_specific_evaluation": skill.evaluation_prompt,
+                    "answer_guidance": skill.answer_guidance,
                     "expected_points": question.expected_points or [],
+                    "common_mistakes": question.common_mistakes or [],
                     "evaluation_rubric": question.evaluation_rubric or {},
                     "followup_strategy": question.followup_strategy or "",
+                    "conversation_history": conversation_history or [],
                     "answer_text": answer_text,
                 },
                 ensure_ascii=False,
@@ -607,12 +680,16 @@ class QuizService:
             if attempt.chapter_id and attempt.evaluation_status in {"partial", "wrong"}:
                 weak_counts[attempt.chapter_id] = weak_counts.get(attempt.chapter_id, 0) + 1
         selected_chapter = chapter_by_id.get(max(weak_counts, key=weak_counts.get)) if weak_counts else chapters[0]
-        selected_type = "condition_boundary" if weak_counts else "concept_explain"
+        selected_type = "theorem_understanding" if weak_counts else "concept_explain"
 
         translator = TranslatorService(task="quiz")
         if getattr(translator, "api_key", None):
             system_prompt = (
-                "Select the next quiz target for a math reader. Return strictly valid JSON with "
+                "Select the next Book Quiz target for a mathematics reader. This layer chooses what the learner should "
+                "teach back; it does not write the question. Prefer a specific weak or not-yet-explained concept supported "
+                "by the learning profile and recent attempts. Choose proof_strategy only when the chapter actually contains "
+                "a proof worth explaining, and theorem_understanding only for a named theorem or key result. "
+                "Return strictly valid JSON with "
                 "chapter_id, question_type, target_concept, reason. chapter_id must be one of the provided ids; "
                 f"question_type must be one of: {', '.join(QUIZ_SKILLS)}."
             )
@@ -657,11 +734,7 @@ class QuizService:
                         "chapter_title": selected_chapter.title_zh or selected_chapter.title_en or "",
                         "question_type": selected_type,
                         "target_concept": target_concept,
-                        "reason": (
-                            f"Target concept: {target_concept}. {reason}"
-                            if target_concept
-                            else reason or "Selected from current learning profile and recent quiz attempts."
-                        ),
+                        "reason": reason or "Selected from current learning profile and recent quiz attempts.",
                     }
             except Exception as exc:
                 logger.warning("Book quiz target selection failed: %s", exc)

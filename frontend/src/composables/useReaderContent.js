@@ -52,40 +52,6 @@ export function useReaderContent(bookStore, book, viewportRef) {
     scheduleViewportRender(activeRequestId.value)
   }
 
-  const normalizeList = (value) => {
-    if (Array.isArray(value)) return value
-    if (typeof value === 'string' && value.trim()) return [value]
-    return []
-  }
-
-  const formatLearningItem = (item) => {
-    if (typeof item === 'string') return item
-    if (!item || typeof item !== 'object') return ''
-
-    const title = item.name || item.title || item.term || ''
-    const detail = item.description || item.statement || item.summary || item.content || ''
-    if (title && detail) return `**${title}:** ${detail}`
-    return title || detail
-  }
-
-  const formatLearningSection = (title, value) => {
-    const items = normalizeList(value).map(formatLearningItem).filter(Boolean)
-    if (!items.length) return ''
-
-    return [`## ${title}`, ...items.map((item) => `- ${item}`)].join('\n')
-  }
-
-  const learningToMarkdown = (learning) => {
-    const sections = [
-      learning?.summary ? `## Summary\n\n${learning.summary}` : '',
-      formatLearningSection('Concepts', learning?.concepts),
-      formatLearningSection('Key Theorems', learning?.key_theorems),
-      formatLearningSection('Dependencies', learning?.dependencies)
-    ].filter(Boolean)
-
-    return sections.length ? sections.join('\n\n') : '_No learning summary available._'
-  }
-
   const loadChapter = async (item, requestId) => {
     const chapterId = item.chapterId || item.chapter_id
     const data = await bookStore.fetchReaderContent(book.value?.id, {
@@ -146,37 +112,6 @@ export function useReaderContent(bookStore, book, viewportRef) {
     renderedTarget.value = renderMarkdown(data.content, book.value)
   }
 
-  const loadLearning = async (item, requestId) => {
-    const chapterId = item.chapterId || item.chapter_id
-    const chapterRequest = chapterId
-      ? bookStore.fetchReaderContent(book.value?.id, {
-          readerType: 'chapter',
-          chapterId
-        }).catch((error) => {
-          console.error('Failed to load learning chapter context:', error)
-          return null
-        })
-      : Promise.resolve(null)
-    const [data, chapterData] = await Promise.all([
-      bookStore.fetchReaderContent(book.value?.id, {
-        readerType: 'learning',
-        chapterId
-      }),
-      chapterRequest
-    ])
-    if (requestId !== activeRequestId.value) return
-
-    if (chapterData) {
-      const rawContent = typeof chapterData.content_raw === 'string' ? chapterData.content_raw : ''
-      const translatedContent = typeof chapterData.content_translated === 'string' && chapterData.content_translated.trim()
-        ? chapterData.content_translated
-        : rawContent
-      renderedSource.value = renderMarkdown(translatedContent, book.value)
-    }
-    const learningData = data?.learning || data
-    renderedTarget.value = renderMarkdown(learningToMarkdown(learningData), book.value)
-  }
-
   const loadItem = async (item) => {
     const requestId = activeRequestId.value + 1
     activeRequestId.value = requestId
@@ -198,8 +133,6 @@ export function useReaderContent(bookStore, book, viewportRef) {
         await loadChapter(item, requestId)
       } else if (item.type === 'guide') {
         await loadGuide(item, requestId)
-      } else if (item.type === 'learning') {
-        await loadLearning(item, requestId)
       } else {
         throw new Error(`Unsupported reader item type: ${item.type}`)
       }

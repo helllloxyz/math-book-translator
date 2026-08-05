@@ -53,7 +53,6 @@ const selectedTextRef = ref(null)
 
 const typeLabel = computed(() => {
   if (props.card.readerType === 'guide') return 'Guide'
-  if (props.card.readerType === 'learning') return 'Learning'
   if (props.card.type === 'chapter') return 'Chapter'
   if (props.card.type === 'selection') return 'Selection'
   if (props.card.type === 'quiz') return 'Quiz'
@@ -65,7 +64,6 @@ const subtitle = computed(() => {
   if (props.card.loading) return 'Generating response...'
   if (props.card.createdAt) return new Date(props.card.createdAt).toLocaleDateString()
   if (props.card.readerType === 'guide') return 'Current guide context'
-  if (props.card.readerType === 'learning') return 'Current learning context'
   if (props.card.type === 'chapter') return 'Current chapter context'
   if (props.card.type === 'selection') return 'Selected text context'
   if (props.card.type === 'quiz') return 'Quiz dialogue'

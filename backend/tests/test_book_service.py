@@ -45,7 +45,7 @@ def make_package_upload(files: dict[str, str], filename: str = "book.zip") -> Up
 
 
 @pytest.mark.asyncio
-async def test_import_preprocessed_book_creates_learning_sidecar_dirs(tmp_path):
+async def test_import_preprocessed_book_creates_guide_and_user_dirs(tmp_path):
     source_dir = tmp_path / "preprocessed-book"
     source_dir.mkdir()
     meta_path = source_dir / "meta.json"
@@ -64,8 +64,9 @@ async def test_import_preprocessed_book_creates_learning_sidecar_dirs(tmp_path):
 
     await BookService.import_preprocessed_book(str(source_dir), str(meta_path), FakeSession())
 
-    assert (source_dir / "book_learning").is_dir()
+    assert not (source_dir / "book_learning").exists()
     assert (source_dir / "book_guides").is_dir()
+    assert (source_dir / "book_user").is_dir()
 
 
 @pytest.mark.asyncio
@@ -101,7 +102,7 @@ async def test_build_book_package_includes_book_storage_files(tmp_path, monkeypa
         "meta.json",
         "book_md/1.md",
         "book_trans_md/1_trans_zh.md",
-        "book_learning/1.md",
+        "book_learning/legacy.md",
         "book_guides/guides.json",
     ):
         path = book_dir / relative_path
@@ -117,9 +118,9 @@ async def test_build_book_package_includes_book_storage_files(tmp_path, monkeypa
         "book-uuid/meta.json",
         "book-uuid/book_md/1.md",
         "book-uuid/book_trans_md/1_trans_zh.md",
-        "book-uuid/book_learning/1.md",
         "book-uuid/book_guides/guides.json",
     }.issubset(names)
+    assert "book-uuid/book_learning/legacy.md" not in names
 
 
 @pytest.mark.asyncio
@@ -275,25 +276,6 @@ class SlowTranslator:
         return f"ZH:{text}"
 
 
-class CompletingTranslator(SlowTranslator):
-    async def complete(self, user_prompt: str, system_prompt: str, temperature: float = 0.3) -> str:
-        return """
-        # Chapter Learning Context
-
-        ## Summary
-        Compiled learning
-
-        ## Concepts
-        - **Concept**: Context
-
-        ## Key Theorems
-        - None
-
-        ## Dependencies
-        - None
-        """
-
-
 class FailingTranslator(SlowTranslator):
     async def translate_text(self, text):
         self.calls.append(text)
@@ -310,14 +292,9 @@ class MissingConfigTranslator(SlowTranslator):
 async def test_guide_generation_does_not_pregenerate_quizzes(monkeypatch):
     calls = []
 
-    async def ensure_contexts(book, chapters, translator):
-        calls.append("learning")
-        return 0
-
     async def generate_guides(book, chapters, translator):
         calls.append("guides")
 
-    monkeypatch.setattr(BookService, "ensure_chapter_learning_contexts", ensure_contexts)
     monkeypatch.setattr(
         "app.services.book_service.GuideCompilerService.generate_top_down_guides",
         generate_guides,
@@ -328,12 +305,36 @@ async def test_guide_generation_does_not_pregenerate_quizzes(monkeypatch):
     await BookService.generate_guides_for_translated_book(
         book,
         [FakeChapter("1")],
-        CompletingTranslator(),
+        SlowTranslator(),
         FakeSession(),
         1,
     )
 
-    assert calls == ["learning", "guides"]
+    assert calls == ["guides"]
+
+
+@pytest.mark.asyncio
+async def test_guide_generation_failure_is_not_hidden(monkeypatch):
+    async def fail_guides(book, chapters, translator):
+        raise RuntimeError("guide provider failed")
+
+    monkeypatch.setattr(
+        "app.services.book_service.GuideCompilerService.generate_top_down_guides",
+        fail_guides,
+    )
+    book = FakeBook()
+    book.status = None
+
+    with pytest.raises(RuntimeError, match="guide provider failed"):
+        await BookService.generate_guides_for_translated_book(
+            book,
+            [FakeChapter("1")],
+            SlowTranslator(),
+            FakeSession(),
+            1,
+        )
+
+    assert book.status.value == "generating_guides"
 
 
 @pytest.mark.asyncio
@@ -393,13 +394,6 @@ async def test_translate_pending_chapters_runs_concurrently_and_skips_existing(t
     existing.parent.mkdir(parents=True, exist_ok=True)
     existing.write_text("already translated", encoding="utf-8")
 
-    async def fake_compile_chapter_learning(**_kwargs):
-        return {}
-
-    monkeypatch.setattr(
-        "app.services.book_service.LearningContextService.compile_chapter_learning",
-        fake_compile_chapter_learning,
-    )
     translator = SlowTranslator()
     progress = []
 
@@ -417,39 +411,8 @@ async def test_translate_pending_chapters_runs_concurrently_and_skips_existing(t
     assert translator.max_active == 2
     assert translator.calls == ["2", "3"]
     assert (tmp_path / book.uuid / "book_trans_md" / "2_trans_zh.md").read_text(encoding="utf-8") == "ZH:2"
+    assert not (tmp_path / book.uuid / "book_learning").exists()
     assert progress[-1] == (3, 3, 0)
-
-
-@pytest.mark.asyncio
-async def test_ensure_chapter_learning_contexts_continues_after_compile_failure(tmp_path, monkeypatch):
-    monkeypatch.setenv("STORAGE_DIR", str(tmp_path))
-    book = FakeBook()
-    chapters = [FakeChapter("1"), FakeChapter("2")]
-    for chapter in chapters:
-        raw_path = tmp_path / book.uuid / "book_md" / f"{chapter.chapter_index}.md"
-        trans_path = tmp_path / book.uuid / "book_trans_md" / f"{chapter.chapter_index}_trans_zh.md"
-        raw_path.parent.mkdir(parents=True, exist_ok=True)
-        trans_path.parent.mkdir(parents=True, exist_ok=True)
-        raw_path.write_text(f"raw {chapter.chapter_index}", encoding="utf-8")
-        trans_path.write_text(f"translated {chapter.chapter_index}", encoding="utf-8")
-
-    calls = []
-
-    async def fake_compile_chapter_learning(**kwargs):
-        calls.append(kwargs["chapter_index"])
-        if kwargs["chapter_index"] == "1":
-            raise ValueError("bad json")
-        return {}
-
-    monkeypatch.setattr(
-        "app.services.book_service.LearningContextService.compile_chapter_learning",
-        fake_compile_chapter_learning,
-    )
-
-    compiled = await BookService.ensure_chapter_learning_contexts(book, chapters, CompletingTranslator())
-
-    assert calls == ["1", "2"]
-    assert compiled == 1
 
 
 @pytest.mark.asyncio
@@ -496,44 +459,3 @@ async def test_translate_pending_chapters_does_not_retry_missing_llm_configurati
     assert result.completed == 0
     assert result.failed == 1
     assert translator.calls == ["source text"]
-
-
-@pytest.mark.asyncio
-async def test_ensure_chapter_learning_contexts_compiles_missing_context_for_existing_translation(tmp_path, monkeypatch):
-    monkeypatch.setenv("STORAGE_DIR", str(tmp_path))
-    book = FakeBook()
-    chapter = FakeChapter("1", title_en="Existing Translation")
-
-    raw_path = tmp_path / book.uuid / "book_md" / "1.md"
-    trans_path = tmp_path / book.uuid / "book_trans_md" / "1_trans_zh.md"
-    raw_path.parent.mkdir(parents=True)
-    trans_path.parent.mkdir(parents=True)
-    raw_path.write_text("raw", encoding="utf-8")
-    trans_path.write_text("translated", encoding="utf-8")
-
-    translator = CompletingTranslator()
-
-    compiled = await BookService.ensure_chapter_learning_contexts(book, [chapter], translator)
-
-    assert compiled == 1
-    assert translator.calls == []
-    learning_path = tmp_path / book.uuid / "book_learning" / "1.md"
-    assert learning_path.exists()
-    assert "Compiled learning" in learning_path.read_text(encoding="utf-8")
-
-
-@pytest.mark.asyncio
-async def test_ensure_chapter_learning_contexts_skips_existing_context(tmp_path, monkeypatch):
-    monkeypatch.setenv("STORAGE_DIR", str(tmp_path))
-    book = FakeBook()
-    chapter = FakeChapter("1")
-
-    learning_path = tmp_path / book.uuid / "book_learning" / "1.md"
-    learning_path.parent.mkdir(parents=True)
-    learning_path.write_text("# Chapter Learning Context\n\n## Summary\nReady", encoding="utf-8")
-
-    translator = CompletingTranslator()
-
-    compiled = await BookService.ensure_chapter_learning_contexts(book, [chapter], translator)
-
-    assert compiled == 0

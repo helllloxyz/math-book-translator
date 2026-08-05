@@ -38,6 +38,7 @@ async def next_chapter_quiz(chapter_id: int, request: QuizNextRequest, db: Async
     try:
         question = await QuizService.next_chapter_question(
             chapter_id,
+            quiz_mode=request.quiz_mode,
             question_type=request.question_type,
             personalization_context=request.personalization_context,
             db=db,
@@ -53,7 +54,12 @@ async def next_chapter_quiz(chapter_id: int, request: QuizNextRequest, db: Async
 async def create_quiz_attempt(question_id: int, request: QuizAttemptRequest, db: AsyncSession = Depends(get_db)):
     if not request.answer_text.strip():
         raise HTTPException(status_code=400, detail="answer_text is required")
-    result = await QuizService.submit_attempt(question_id, request.answer_text, db)
+    result = await QuizService.submit_attempt(
+        question_id,
+        request.answer_text,
+        db,
+        conversation_history=request.conversation_history,
+    )
     if result is None:
         raise HTTPException(status_code=404, detail="Quiz question not found")
     return result
