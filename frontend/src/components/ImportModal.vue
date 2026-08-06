@@ -197,26 +197,6 @@
               {{ loading ? 'Importing...' : 'Import Package' }}
             </button>
           </section>
-
-          <section class="package-section">
-            <div>
-              <h3>Export Portable Package</h3>
-              <p class="help-text">Choose a book from this library and download its remote storage directory as a .zip package.</p>
-            </div>
-            <select v-model="selectedExportBookId" class="modal-input package-select">
-              <option value="">Select a book to export</option>
-              <option v-for="book in books" :key="book.id" :value="String(book.id)">
-                {{ book.title }}
-              </option>
-            </select>
-            <button 
-              class="submit-btn secondary-btn" 
-              :disabled="!selectedExportBookId || loading" 
-              @click="handlePackageExport"
-            >
-              {{ loading ? 'Preparing...' : 'Export Package' }}
-            </button>
-          </section>
         </div>
         </template>
       </div>
@@ -231,20 +211,15 @@ const props = defineProps({
   show: Boolean,
   loading: Boolean,
   preflightWarning: Object,
-  outlineReview: Object,
-  books: {
-    type: Array,
-    default: () => []
-  }
+  outlineReview: Object
 })
 
-const emit = defineEmits(['close', 'import', 'upload', 'import-package', 'export-package', 'confirm-preflight', 'cancel-preflight', 'confirm-outline', 'cancel-outline'])
+const emit = defineEmits(['close', 'import', 'upload', 'import-package', 'confirm-preflight', 'cancel-preflight', 'confirm-outline', 'cancel-outline'])
 
 const activeTab = ref('local')
 const localPath = ref('')
 const selectedFile = ref(null)
 const selectedPackageFile = ref(null)
-const selectedExportBookId = ref('')
 const splitLevelById = ref({})
 const importDepth = ref(1)
 
@@ -357,9 +332,6 @@ const handlePackageImport = () => {
   selectedPackageFile.value = null
 }
 
-const handlePackageExport = () => {
-  emit('export-package', Number(selectedExportBookId.value))
-}
 </script>
 
 <style scoped>
@@ -532,10 +504,6 @@ const handlePackageExport = () => {
   outline: none;
   border-color: #93c5fd;
   box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
-}
-
-.package-select {
-  appearance: auto;
 }
 
 .file-dropzone {

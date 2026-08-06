@@ -4,6 +4,7 @@ import Reader from '../views/Reader.vue'
 import Notes from '../views/Notes.vue'
 import ConversationPage from '../views/ConversationPage.vue'
 import BookManagement from '../views/BookManagement.vue'
+import BookLearning from '../views/BookLearning.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -27,6 +28,11 @@ const router = createRouter({
       path: '/book/:id/manage',
       name: 'book-management',
       component: BookManagement
+    },
+    {
+      path: '/book/:id/learning',
+      name: 'book-learning',
+      component: BookLearning
     },
     {
       path: '/book/:id/conversation/:conversationId',

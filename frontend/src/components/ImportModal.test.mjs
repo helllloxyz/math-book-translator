@@ -34,7 +34,6 @@ assert.match(source, /full\.md/, 'ImportModal should explain directory imports p
 assert.match(source, /activeTab === 'package'/, 'ImportModal should render a Package tab')
 assert.match(source, /accept="\.zip,application\/zip"/, 'ImportModal package import should accept zip files')
 assert.match(source, /import-package/, 'ImportModal should emit a package import event')
-assert.match(source, /export-package/, 'ImportModal should emit a package export event')
-assert.match(source, /selectedExportBookId/, 'ImportModal should select a book for package export')
+assert.doesNotMatch(source, /export-package|selectedExportBookId|Export Portable Package/, 'ImportModal should keep export out of the add-book flow')
 
 console.log('ImportModal preflight warning UI ok')

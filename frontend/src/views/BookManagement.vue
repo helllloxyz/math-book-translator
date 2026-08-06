@@ -28,8 +28,9 @@
         <nav class="section-nav" aria-label="页面导航">
           <a href="#status">状态</a>
           <a href="#chapters">章节</a>
-          <a href="#quiz">Quiz 评估</a>
-          <a href="#profile">学习画像</a>
+          <router-link :to="{ name: 'book-learning', params: { id: bookId } }" target="_blank" rel="noopener">
+            Quiz · 画像 ↗
+          </router-link>
         </nav>
         <button class="refresh-button" type="button" :disabled="refreshing" @click="loadSnapshot(true)">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8.1 8.1 0 1 0 .1 3M20 4v7h-7" /></svg>
@@ -41,15 +42,15 @@
         <div class="hero-copy">
           <p class="eyebrow">BOOK OPERATIONS · {{ formatDate(snapshot.book.created_at) }}</p>
           <h1 id="management-title">{{ snapshot.book.title }}</h1>
-          <p class="hero-description">查看内容是否就绪、定位需要维护的章节，并从学习记录判断下一步应读什么、练什么。</p>
+          <p class="hero-description">查看原文、译文与导读是否就绪，定位需要维护的章节。学习评估与画像已整理到独立工作区。</p>
           <div class="hero-actions">
             <router-link class="button button-primary" :to="{ name: 'reader', params: { id: bookId } }">
               进入阅读
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
             </router-link>
-            <button class="button button-secondary" type="button" :disabled="loadingAction === 'quiz'" @click="startBookQuiz">
-              {{ loadingAction === 'quiz' ? '正在选择题目' : '开始 Book Quiz' }}
-            </button>
+            <router-link class="button button-secondary" :to="{ name: 'book-learning', params: { id: bookId } }" target="_blank" rel="noopener">
+              查看 Quiz · 画像
+            </router-link>
           </div>
         </div>
 
@@ -68,6 +69,11 @@
 
       <dl class="metric-strip">
         <div>
+          <dt>正文章节</dt>
+          <dd>{{ snapshot.content.source_chapters }}</dd>
+          <small>{{ snapshot.content.chapters_total }} 个目录节点</small>
+        </div>
+        <div>
           <dt>译文覆盖</dt>
           <dd>{{ formatPercent(snapshot.content.translation_ratio) }}</dd>
           <small>{{ snapshot.content.translated_chapters }} / {{ snapshot.content.source_chapters }} 章</small>
@@ -76,21 +82,6 @@
           <dt>章节导读</dt>
           <dd>{{ snapshot.content.chapter_guides_ready }}</dd>
           <small>{{ guideAttentionText }}</small>
-        </div>
-        <div>
-          <dt>Quiz 作答</dt>
-          <dd>{{ snapshot.quiz.attempts }}</dd>
-          <small>{{ snapshot.quiz.questions }} 道已生成题目</small>
-        </div>
-        <div>
-          <dt>平均评估</dt>
-          <dd>{{ formatPercent(snapshot.quiz.average_score) }}</dd>
-          <small>{{ snapshot.quiz.completed }} 次掌握</small>
-        </div>
-        <div>
-          <dt>学习记录</dt>
-          <dd>{{ snapshot.activity.notes }}</dd>
-          <small>{{ snapshot.profile.unprocessed_notes_count || 0 }} 条待纳入画像</small>
         </div>
       </dl>
 
@@ -140,17 +131,10 @@
                 </span>
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
               </button>
-              <button type="button" :disabled="snapshot.book.is_busy || Boolean(loadingAction)" @click="requestGuideRegeneration">
+              <button class="operation-regenerate" type="button" :disabled="snapshot.book.is_busy || Boolean(loadingAction)" @click="requestGuideRegeneration">
                 <span>
-                  <strong>重新生成全部导读</strong>
-                  <small>基于当前译文覆盖现有 Guide</small>
-                </span>
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
-              </button>
-              <button type="button" :disabled="Boolean(loadingAction) || !snapshot.profile.should_analyze" @click="analyzeProfile">
-                <span>
-                  <strong>更新学习画像</strong>
-                  <small>{{ profilePendingText }}</small>
+                  <strong>重新生成全书导读</strong>
+                  <small>会覆盖现有 Guide，并产生较多模型调用</small>
                 </span>
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
               </button>
@@ -246,104 +230,6 @@
         </div>
       </section>
 
-      <section id="quiz" class="management-section quiz-section">
-        <header class="section-heading">
-          <div>
-            <p class="section-index">03 / QUIZ REVIEW</p>
-            <h2>Quiz 评估</h2>
-          </div>
-          <p>这里呈现的是语义评估结果，不把关键词命中当成掌握。样本较少时只作为阅读方向提示。</p>
-        </header>
-
-        <div v-if="snapshot.quiz.attempts" class="quiz-layout">
-          <div class="quiz-summary">
-            <div class="score-figure">
-              <span>平均评估</span>
-              <strong>{{ formatPercent(snapshot.quiz.average_score) }}</strong>
-              <p>基于 {{ snapshot.quiz.attempts }} 次作答</p>
-            </div>
-            <dl class="outcome-list">
-              <div><dt><span class="outcome-dot completed"></span>掌握</dt><dd>{{ snapshot.quiz.completed }}</dd></div>
-              <div><dt><span class="outcome-dot partial"></span>部分掌握</dt><dd>{{ snapshot.quiz.partial }}</dd></div>
-              <div><dt><span class="outcome-dot wrong"></span>需要复习</dt><dd>{{ snapshot.quiz.wrong }}</dd></div>
-            </dl>
-          </div>
-
-          <div class="type-evaluation">
-            <h3>按能力类型</h3>
-            <div v-for="type in snapshot.quiz.type_breakdown" :key="type.question_type" class="type-row">
-              <div class="type-row-heading">
-                <span>{{ type.label }}</span>
-                <span>{{ type.attempts }} 次 · {{ formatPercent(type.average_score) }}</span>
-              </div>
-              <div class="score-track" aria-hidden="true"><span :style="{ transform: `scaleX(${type.average_score || 0})` }"></span></div>
-            </div>
-          </div>
-
-          <div class="recent-evaluations">
-            <div class="subsection-heading">
-              <h3>最近评估</h3>
-              <span>展开可查看回答与反馈</span>
-            </div>
-            <details v-for="attempt in snapshot.quiz.recent_attempts" :key="attempt.id" class="attempt-row">
-              <summary>
-                <span class="attempt-status" :class="`attempt-${attempt.evaluation_status}`">{{ attempt.evaluation_status_label }}</span>
-                <span class="attempt-main">
-                  <strong>{{ attempt.question_text }}</strong>
-                  <small>{{ attempt.chapter_title }} · {{ attempt.question_type_label }} · {{ formatDateTime(attempt.created_at) }}</small>
-                </span>
-                <span class="attempt-score">{{ formatPercent(attempt.score) }}</span>
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
-              </summary>
-              <div class="attempt-detail">
-                <div><span>你的回答</span><p>{{ attempt.answer_text }}</p></div>
-                <div><span>评估反馈</span><p>{{ attempt.feedback_text || '暂无文字反馈' }}</p></div>
-                <div v-if="attempt.missing_points.length"><span>尚缺要点</span><ul><li v-for="point in attempt.missing_points" :key="point">{{ point }}</li></ul></div>
-              </div>
-            </details>
-          </div>
-        </div>
-
-        <div v-else class="quiz-empty">
-          <div class="empty-mark" aria-hidden="true">Q</div>
-          <div>
-            <h3>还没有可评估的作答</h3>
-            <p>完成几次章节 Quiz 或 Book Quiz 后，这里会按概念解释、定理理解、证明策略和概念连接展示学习表现。</p>
-          </div>
-          <button class="button button-primary" type="button" @click="startBookQuiz">开始第一次 Book Quiz</button>
-        </div>
-      </section>
-
-      <section id="profile" class="management-section profile-section">
-        <header class="section-heading">
-          <div>
-            <p class="section-index">04 / LEARNING PROFILE</p>
-            <h2>学习画像</h2>
-          </div>
-          <p>画像把分散的笔记和 Quiz 反馈压缩成强项、薄弱概念、常见误区与下一步目标，不替代原始学习记录。</p>
-        </header>
-
-        <div class="profile-layout">
-          <aside class="profile-meta">
-            <div>
-              <span>上次分析</span>
-              <strong>{{ snapshot.profile.last_analyzed_at ? formatDateTime(snapshot.profile.last_analyzed_at) : '尚未分析' }}</strong>
-            </div>
-            <div>
-              <span>累计分析</span>
-              <strong>{{ snapshot.profile.meta?.analysis_count || 0 }} 次</strong>
-            </div>
-            <div>
-              <span>待处理证据</span>
-              <strong>{{ (snapshot.profile.unprocessed_notes_count || 0) + (snapshot.profile.unprocessed_quiz_count || 0) }} 条</strong>
-            </div>
-            <button class="button button-primary" type="button" :disabled="!snapshot.profile.should_analyze || Boolean(loadingAction)" @click="analyzeProfile">
-              {{ loadingAction === 'profile' ? '正在分析' : snapshot.profile.should_analyze ? '更新画像' : '画像已是最新' }}
-            </button>
-          </aside>
-          <article ref="profileRef" class="profile-document markdown-content" v-html="profileHtml"></article>
-        </div>
-      </section>
     </div>
 
     <Transition name="toast">
@@ -359,10 +245,11 @@
         <h2 id="confirm-title">{{ confirmation.title }}</h2>
         <p>{{ confirmation.description }}</p>
         <div v-if="confirmation.kind === 'chapter'" class="confirm-note">新译文生成成功后才会替换当前译文。章节导读随后会标为“已过期”，直到你重新生成导读。</div>
+        <div v-else class="confirm-note confirm-cost-note">这是全书操作，会发起多次模型调用并消耗较多 Token。启动后请等待后台完成，避免重复提交。</div>
         <footer>
           <button class="button button-secondary" type="button" @click="confirmation = null">取消</button>
           <button class="button button-primary" type="button" :disabled="Boolean(loadingAction)" @click="confirmRegeneration">
-            {{ loadingAction ? '正在启动' : '确认重新生成' }}
+            {{ loadingAction ? '正在启动' : confirmation.kind === 'guides' ? '确认重新生成全书导读' : '确认重新生成' }}
           </button>
         </footer>
       </section>
@@ -371,13 +258,11 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { useBookStore } from '../stores/bookStore'
-import { renderMarkdown, renderMath } from '../utils/renderer'
 
 const route = useRoute()
-const router = useRouter()
 const bookStore = useBookStore()
 const bookId = computed(() => Number(route.params.id))
 const snapshot = ref(null)
@@ -390,7 +275,6 @@ const chapterFilter = ref('all')
 const chapterLimit = ref(24)
 const confirmation = ref(null)
 const notice = ref(null)
-const profileRef = ref(null)
 let pollingTimer = null
 let noticeTimer = null
 
@@ -415,13 +299,6 @@ const filteredChapters = computed(() => {
   })
 })
 const displayedChapters = computed(() => filteredChapters.value.slice(0, chapterLimit.value))
-const profileHtml = computed(() => {
-  const rawProfile = snapshot.value?.profile.markdown || ''
-  const content = !rawProfile || rawProfile.includes('No analyzed learning activity yet')
-    ? '# 尚未生成学习画像\n\n创建阅读笔记或完成 Quiz 后，可以在这里把学习证据整理成强项、薄弱概念和下一步目标。'
-    : rawProfile
-  return renderMarkdown(content)
-})
 const readinessDescription = computed(() => {
   const descriptions = {
     ready: '正文、译文和章节导读都已就绪，可以把注意力放回阅读本身。',
@@ -446,11 +323,6 @@ const guidePipelineDescription = computed(() => {
   }
   return `${content.chapter_guides_ready} 章可用，${content.chapter_guides_stale} 章已过期，${content.chapter_guides_missing} 章尚未生成。`
 })
-const profilePendingText = computed(() => {
-  if (!snapshot.value?.profile.should_analyze) return '暂无新的笔记或 Quiz 证据'
-  return `${snapshot.value.profile.unprocessed_notes_count || 0} 条笔记 · ${snapshot.value.profile.unprocessed_quiz_count || 0} 次 Quiz 待分析`
-})
-
 const showNotice = (message, type = 'success') => {
   if (noticeTimer) window.clearTimeout(noticeTimer)
   notice.value = { message, type }
@@ -486,8 +358,6 @@ const loadSnapshot = async (silent = false) => {
   error.value = ''
   try {
     snapshot.value = await bookStore.fetchBookManagement(bookId.value)
-    await nextTick()
-    if (profileRef.value) renderMath(profileRef.value)
     syncPolling()
   } catch (err) {
     error.value = err.message || '加载失败'
@@ -513,8 +383,8 @@ const completeTranslations = async () => {
 const requestGuideRegeneration = () => {
   confirmation.value = {
     kind: 'guides',
-    title: '重新生成全部导读？',
-    description: '现有书籍、目录与章节导读将按当前译文重新生成。这会产生一轮新的模型调用。'
+    title: '重新生成全书导读？',
+    description: '现有书籍导读、目录导读与章节导读都会按当前译文重新生成，并覆盖已有结果。'
   }
 }
 
@@ -562,42 +432,6 @@ const confirmRegeneration = async () => {
   }
 }
 
-const analyzeProfile = async () => {
-  loadingAction.value = 'profile'
-  try {
-    const result = await bookStore.analyzeLearningProfile(bookId.value)
-    showNotice(result.summary || '学习画像已更新')
-    await loadSnapshot(true)
-  } catch (err) {
-    showNotice(err.message, 'error')
-  } finally {
-    loadingAction.value = ''
-  }
-}
-
-const startBookQuiz = async () => {
-  loadingAction.value = 'quiz'
-  try {
-    const target = await bookStore.selectBookQuizTarget(bookId.value)
-    window.sessionStorage.setItem(`bookQuizTarget:${bookId.value}`, JSON.stringify(target))
-    await router.push({
-      name: 'reader',
-      params: { id: bookId.value },
-      query: {
-        reader_type: 'chapter',
-        chapter_id: target.chapter_id,
-        quiz: '1',
-        quiz_mode: 'book',
-        question_type: target.question_type
-      }
-    })
-  } catch (err) {
-    showNotice(`无法开始 Book Quiz：${err.message}`, 'error')
-  } finally {
-    loadingAction.value = ''
-  }
-}
-
 const chapterReaderRoute = chapter => ({
   name: 'reader',
   params: { id: bookId.value },
@@ -607,7 +441,6 @@ const chapterReaderRoute = chapter => ({
 const formatPercent = value => value === null || value === undefined ? '—' : `${Math.round(Number(value) * 100)}%`
 const formatCharacters = value => Number(value || 0).toLocaleString('zh-CN') + ' 字符'
 const formatDate = value => value ? new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' }).format(new Date(value)) : '未知日期'
-const formatDateTime = value => value ? new Intl.DateTimeFormat('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(value)) : '尚无记录'
 const translationLabel = status => ({ ready: '已翻译', missing: '缺失', source_missing: '原文缺失' }[status] || status)
 const guideLabel = status => ({ ready: '已同步', stale: '已过期', missing: '缺失' }[status] || status)
 const stateClass = status => status === 'ready' ? 'is-ready' : status === 'stale' || status === 'missing' ? 'is-attention' : 'is-error'
@@ -667,8 +500,7 @@ onBeforeUnmount(() => {
 .button svg,
 .operation-list svg,
 .chapter-actions-cell svg,
-.chapter-search svg,
-.attempt-row summary > svg {
+.chapter-search svg {
   width: 17px;
   height: 17px;
   fill: none;
@@ -718,6 +550,7 @@ onBeforeUnmount(() => {
   font-weight: 580;
   line-height: .98;
   letter-spacing: -.06em;
+  overflow-wrap: anywhere;
   text-wrap: balance;
 }
 
@@ -766,7 +599,7 @@ onBeforeUnmount(() => {
 
 .metric-strip {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   margin: 0;
   border-block: 1px solid var(--color-line-strong);
 }
@@ -788,17 +621,13 @@ onBeforeUnmount(() => {
 .pipeline-copy h3 { margin: 0 0 .4rem; font-size: .98rem; }
 .pipeline-copy p { margin: 0; color: var(--color-muted); font-size: .8rem; line-height: 1.65; }
 .state-label,
-.compact-state,
-.attempt-status { display: inline-flex; align-items: center; width: fit-content; border-radius: 999px; font-size: .68rem; font-weight: 700; white-space: nowrap; }
+.compact-state { display: inline-flex; align-items: center; width: fit-content; border-radius: 999px; font-size: .68rem; font-weight: 700; white-space: nowrap; }
 .state-label { padding: .3rem .6rem; }
 .state-ready,
-.is-ready,
-.attempt-completed { color: var(--color-success); background: var(--color-success-soft); }
+.is-ready { color: var(--color-success); background: var(--color-success-soft); }
 .state-attention,
-.is-attention,
-.attempt-partial { color: var(--color-warning); background: var(--color-warning-soft); }
-.is-error,
-.attempt-wrong { color: var(--color-danger); background: var(--color-danger-soft); }
+.is-attention { color: var(--color-warning); background: var(--color-warning-soft); }
+.is-error { color: var(--color-danger); background: var(--color-danger-soft); }
 
 .operation-panel { padding: 1.7rem; border: 1px solid var(--color-line-strong); border-radius: 16px; background: rgba(255,253,248,.62); box-shadow: 0 18px 50px rgba(63,49,31,.06); }
 .operation-panel h3 { margin: 0; font-size: 1.35rem; letter-spacing: -.025em; }
@@ -806,6 +635,8 @@ onBeforeUnmount(() => {
 .operation-list { border-top: 1px solid var(--color-line); }
 .operation-list button { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: 1rem 0; border: 0; border-bottom: 1px solid var(--color-line); color: var(--color-ink); text-align: left; background: transparent; cursor: pointer; }
 .operation-list button:not(:disabled):hover { color: var(--color-accent-dark); transform: translateX(3px); }
+.operation-list .operation-regenerate { color: #875c21; }
+.operation-list .operation-regenerate:not(:disabled):hover { color: #9f3e2b; }
 .operation-list span { display: grid; gap: .2rem; }
 .operation-list strong { font-size: .78rem; }
 .operation-list small { color: var(--color-muted); font-size: .68rem; font-weight: 450; }
@@ -838,64 +669,6 @@ onBeforeUnmount(() => {
 .chapter-load-more button { padding: .45rem .7rem; border: 1px solid var(--color-line); border-radius: 6px; color: var(--color-ink); background: var(--color-surface-raised); font-size: .7rem; cursor: pointer; }
 .chapter-load-more button:hover { border-color: var(--color-line-strong); }
 
-.quiz-layout { display: grid; grid-template-columns: minmax(260px, .7fr) minmax(320px, 1fr); gap: 3rem 5rem; }
-.quiz-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; padding: 1.6rem 0; border-block: 1px solid var(--color-line-strong); }
-.score-figure span,
-.profile-meta span { color: var(--color-muted); font-size: .68rem; }
-.score-figure strong { display: block; margin: .5rem 0; font-family: var(--font-mono); font-size: 3rem; line-height: 1; letter-spacing: -.08em; }
-.score-figure p { margin: 0; color: var(--color-faint); font-size: .7rem; }
-.outcome-list { margin: 0; }
-.outcome-list div { display: flex; justify-content: space-between; padding: .45rem 0; border-bottom: 1px solid var(--color-line); font-size: .72rem; }
-.outcome-list dt { display: flex; align-items: center; gap: .45rem; color: var(--color-muted); }
-.outcome-list dd { margin: 0; font-family: var(--font-mono); font-weight: 700; }
-.outcome-dot { width: 7px; height: 7px; border-radius: 50%; }
-.outcome-dot.completed { background: var(--color-success); }
-.outcome-dot.partial { background: var(--color-warning); }
-.outcome-dot.wrong { background: var(--color-danger); }
-.type-evaluation { padding: 1.6rem 0; border-block: 1px solid var(--color-line-strong); }
-.type-evaluation h3,
-.subsection-heading h3 { margin: 0 0 1.2rem; font-size: .88rem; }
-.type-row + .type-row { margin-top: 1.05rem; }
-.type-row-heading { display: flex; justify-content: space-between; gap: 1rem; margin-bottom: .38rem; color: var(--color-muted); font-size: .69rem; }
-.type-row-heading span:first-child { color: var(--color-ink); font-weight: 650; }
-.score-track { height: 5px; overflow: hidden; background: var(--color-surface-muted); }
-.score-track span { display: block; width: 100%; height: 100%; transform-origin: left; background: var(--color-accent); transition: transform .55s cubic-bezier(.16,1,.3,1); }
-.recent-evaluations { grid-column: 1 / -1; }
-.subsection-heading { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--color-line-strong); }
-.subsection-heading span { color: var(--color-faint); font-size: .67rem; }
-.attempt-row { border-bottom: 1px solid var(--color-line); }
-.attempt-row summary { display: grid; grid-template-columns: auto minmax(0, 1fr) 60px 20px; gap: 1rem; align-items: center; padding: 1.1rem 0; list-style: none; cursor: pointer; }
-.attempt-row summary::-webkit-details-marker { display: none; }
-.attempt-status { padding: .25rem .5rem; }
-.attempt-main { min-width: 0; }
-.attempt-main strong { display: block; overflow: hidden; font-size: .76rem; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
-.attempt-main small { display: block; margin-top: .28rem; color: var(--color-faint); font-size: .64rem; }
-.attempt-score { font-family: var(--font-mono); font-size: .78rem; text-align: right; }
-.attempt-row[open] summary > svg { transform: rotate(180deg); }
-.attempt-detail { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; padding: 0 7rem 1.5rem 0; }
-.attempt-detail span { color: var(--color-accent-dark); font-family: var(--font-mono); font-size: .62rem; letter-spacing: .08em; }
-.attempt-detail p,
-.attempt-detail ul { margin: .45rem 0 0; color: var(--color-muted); font-size: .74rem; line-height: 1.7; }
-.quiz-empty { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 1.5rem; align-items: center; padding: 2rem 0; border-block: 1px solid var(--color-line-strong); }
-.empty-mark { width: 52px; height: 52px; display: grid; place-items: center; border: 1px solid var(--color-line-strong); border-radius: 50%; color: var(--color-accent-dark); font-family: var(--font-mono); }
-.quiz-empty h3 { margin: 0; font-size: 1rem; }
-.quiz-empty p { max-width: 70ch; margin: .4rem 0 0; color: var(--color-muted); font-size: .76rem; }
-
-.profile-layout { display: grid; grid-template-columns: minmax(230px, .55fr) minmax(0, 1.7fr); gap: 5rem; align-items: start; }
-.profile-meta { position: sticky; top: 1.5rem; display: grid; border-top: 1px solid var(--color-line-strong); }
-.profile-meta > div { display: grid; gap: .3rem; padding: 1rem 0; border-bottom: 1px solid var(--color-line); }
-.profile-meta strong { font-size: .8rem; }
-.profile-meta .button { margin-top: 1rem; }
-.profile-document { min-height: 320px; padding: 2.5rem clamp(1.5rem, 4vw, 4rem); border: 1px solid var(--color-line); border-radius: 16px; background: var(--color-surface-raised); box-shadow: 0 18px 52px rgba(63,49,31,.065); }
-:deep(.profile-document h1),
-:deep(.profile-document h2),
-:deep(.profile-document h3) { font-family: var(--font-ui); letter-spacing: -.03em; }
-:deep(.profile-document h1) { margin-top: 0; font-size: 1.65rem; }
-:deep(.profile-document h2) { margin-top: 2rem; padding-top: 1.2rem; border-top: 1px solid var(--color-line); font-size: 1.15rem; }
-:deep(.profile-document h3) { font-size: .92rem; }
-:deep(.profile-document p),
-:deep(.profile-document li) { color: var(--color-ink-soft); font-size: .82rem; line-height: 1.8; }
-
 .management-error { display: grid; place-content: center; min-height: 100dvh; text-align: center; }
 .management-error h1 { max-width: 20ch; margin: 0; font-family: var(--font-ui); font-size: 2rem; }
 .management-error > p:not(.eyebrow) { color: var(--color-muted); }
@@ -921,6 +694,7 @@ onBeforeUnmount(() => {
 .confirm-dialog h2 { margin: 0; font-family: var(--font-ui); font-size: 1.45rem; letter-spacing: -.03em; }
 .confirm-dialog > p:not(.eyebrow) { color: var(--color-muted); font-size: .8rem; line-height: 1.7; }
 .confirm-note { padding: .8rem; border-left: 2px solid var(--color-warning); color: var(--color-muted); background: var(--color-warning-soft); font-size: .72rem; line-height: 1.6; }
+.confirm-cost-note { border-left-color: var(--color-danger); color: #7d3e30; background: var(--color-danger-soft); }
 .confirm-dialog footer { display: flex; justify-content: flex-end; gap: .5rem; margin-top: 1.5rem; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 
@@ -933,10 +707,7 @@ onBeforeUnmount(() => {
   .metric-strip { grid-template-columns: repeat(3, 1fr); }
   .metric-strip > div:nth-child(4) { padding-left: 0; border-left: 0; border-top: 1px solid var(--color-line); }
   .metric-strip > div:nth-child(n+4) { border-top: 1px solid var(--color-line); }
-  .status-layout,
-  .profile-layout { grid-template-columns: 1fr; gap: 2.5rem; }
-  .profile-meta { position: static; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
-  .profile-meta .button { grid-column: 1 / -1; }
+  .status-layout { grid-template-columns: 1fr; gap: 2.5rem; }
 }
 
 @media (max-width: 720px) {
@@ -954,16 +725,6 @@ onBeforeUnmount(() => {
   .chapter-tools { align-items: stretch; flex-direction: column; }
   .chapter-search { min-width: 100%; }
   .filter-switch button { flex: 1; }
-  .quiz-layout { grid-template-columns: 1fr; gap: 1.5rem; }
-  .recent-evaluations { grid-column: auto; }
-  .attempt-row summary { grid-template-columns: auto minmax(0,1fr) 18px; }
-  .attempt-score { display: none; }
-  .attempt-detail { grid-template-columns: 1fr; gap: 1rem; padding-right: 0; }
-  .quiz-empty { grid-template-columns: auto 1fr; }
-  .quiz-empty .button { grid-column: 1 / -1; }
-  .profile-meta { grid-template-columns: 1fr; }
-  .profile-meta .button { grid-column: auto; }
-  .profile-document { padding: 1.5rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {

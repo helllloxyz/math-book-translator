@@ -75,8 +75,16 @@
               <span v-if="profileStatuses[book.id]?.should_analyze" class="book-menu-alert" aria-hidden="true"></span>
             </button>
             <div v-if="openBookMenuId === book.id" class="action-menu book-action-menu" role="menu">
-              <p class="menu-section-label">图书操作</p>
+              <p class="menu-section-label">图书文件</p>
               <button class="menu-item" role="menuitem" @click="startEditing(book); closeMenus()">重命名</button>
+              <button
+                class="menu-item"
+                role="menuitem"
+                :disabled="exportingBookId === book.id"
+                @click="handlePackageExport(book); closeMenus()"
+              >
+                {{ exportingBookId === book.id ? '正在导出…' : '导出图书包' }}
+              </button>
               <button
                 v-if="book.type === 'generated'"
                 class="menu-item console-btn"
@@ -85,53 +93,6 @@
                 @click="openConsole(book); closeMenus()"
               >
                 Agent Console
-              </button>
-              <button
-                v-if="shouldOfferTranslation(book)"
-                class="menu-item translate"
-                role="menuitem"
-                @click="translateBook(book); closeMenus()"
-              >
-                {{ book.status === 'failed' ? '重试处理' : '开始翻译' }}
-              </button>
-              <button v-else-if="isBackgroundBusy(book)" class="menu-item" type="button" disabled>
-                {{ isTranslating(book) ? `翻译中 ${translationPercent(book)}%` : '正在生成导读' }}
-              </button>
-              <button
-                v-if="book.status === 'translated'"
-                class="menu-item"
-                role="menuitem"
-                @click="generateBookGuides(book); closeMenus()"
-              >
-                生成 / 重新生成导读
-              </button>
-              <router-link :to="{ name: 'notes', params: { id: book.id }}" class="menu-item menu-link" role="menuitem" @click="closeMenus">
-                查看笔记
-              </router-link>
-              <router-link :to="{ name: 'book-management', params: { id: book.id }}" class="menu-item menu-link" role="menuitem" @click="closeMenus">
-                状态与管理
-              </router-link>
-              <button class="menu-item book-quiz-btn" role="menuitem" title="Book Quiz" @click="startBookQuiz(book); closeMenus()">
-                Book Quiz
-              </button>
-              <p class="menu-section-label">学习画像</p>
-              <button
-                class="menu-item profile-btn"
-                role="menuitem"
-                title="Analyze Learning Profile"
-                :disabled="profileAnalyzingBookId === book.id"
-                @click="analyzeLearningProfile(book); closeMenus()"
-              >
-                {{ profileAnalyzingBookId === book.id ? '分析中…' : 'Analyze Learning Profile' }}
-              </button>
-              <button
-                class="menu-item profile-view-btn"
-                role="menuitem"
-                title="View Learning Profile"
-                :disabled="profileLoading && selectedProfileBook?.id === book.id"
-                @click="openLearningProfile(book)"
-              >
-                View Learning Profile
               </button>
               <div class="menu-divider"></div>
               <button class="menu-item menu-item-danger" role="menuitem" @click="requestDeleteBook(book); closeMenus()">删除图书</button>
@@ -161,7 +122,7 @@
                 </span>
                 <span v-if="profileStatuses[book.id]?.should_analyze" class="book-insight">
                   <span aria-hidden="true"></span>
-                  学习画像已更新
+                  画像待更新
                 </span>
               </div>
               <span class="date">{{ formatBookDate(book.created_at) }}</span>
@@ -184,6 +145,42 @@
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 3h6a4 4 0 0 1 4 4v14a4 4 0 0 0-4-4H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a4 4 0 0 1 4-4h6z"></path></svg>
             <span>继续阅读</span>
           </router-link>
+          <nav class="book-quick-links" :aria-label="`《${book.title}》学习入口`">
+            <router-link
+              :to="{ name: 'book-management', params: { id: book.id } }"
+              target="_blank"
+              rel="noopener"
+              title="在新标签页打开内容状态"
+            >
+              <span class="quick-link-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M4 19V9m6 10V5m6 14v-7m4 7H2" /></svg>
+              </span>
+              <span>状态</span>
+            </router-link>
+            <router-link
+              :to="{ name: 'notes', params: { id: book.id } }"
+              target="_blank"
+              rel="noopener"
+              title="在新标签页打开笔记"
+            >
+              <span class="quick-link-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5" /></svg>
+              </span>
+              <span>笔记</span>
+            </router-link>
+            <router-link
+              :to="{ name: 'book-learning', params: { id: book.id } }"
+              target="_blank"
+              rel="noopener"
+              title="在新标签页打开 Quiz 评估与学习画像"
+            >
+              <span class="quick-link-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9M12 7v5l3 2M17 3h4v4" /></svg>
+              </span>
+              <span>Quiz · 画像</span>
+              <span v-if="profileStatuses[book.id]?.should_analyze" class="quick-link-alert" aria-label="画像有新证据待分析"></span>
+            </router-link>
+          </nav>
         </div>
       </div>
     </div>
@@ -215,12 +212,10 @@
       :loading="importing || uploading"
       :preflight-warning="preflightWarning"
       :outline-review="outlineReview"
-      :books="books"
       @close="closeImportModal"
       @import="handleImport"
       @upload="handleUpload"
       @import-package="handlePackageImport"
-      @export-package="handlePackageExport"
       @confirm-preflight="confirmPreflightImport"
       @cancel-preflight="cancelPreflightImport"
       @confirm-outline="confirmOutlineImport"
@@ -246,30 +241,13 @@
       @close="showConsole = false"
     />
 
-    <div v-if="showProfileModal" class="modal-overlay" @click.self="closeLearningProfile">
-      <div class="profile-modal" role="dialog" aria-modal="true" aria-labelledby="profile-modal-title">
-        <header class="profile-modal-header">
-          <div>
-            <p class="profile-modal-kicker">Learning Profile</p>
-            <h2 id="profile-modal-title">{{ selectedProfileBook?.title || 'User.md' }}</h2>
-          </div>
-          <button class="modal-close-btn" @click="closeLearningProfile" title="Close Learning Profile">Close</button>
-        </header>
-
-        <div v-if="profileSummary" class="profile-summary">{{ profileSummary }}</div>
-        <div v-if="profileLoading" class="profile-state">Loading learning profile...</div>
-        <div v-else-if="profileError" class="profile-state profile-error">{{ profileError }}</div>
-        <article v-else class="profile-content markdown-content" v-html="profileHtml"></article>
-      </div>
-    </div>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount, computed, nextTick, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import { useBookStore } from '../stores/bookStore'
-import { renderMarkdown, renderMath } from '../utils/renderer'
+import { renderMath } from '../utils/renderer'
 import ImportModal from '../components/ImportModal.vue'
 import SettingsModal from '../components/SettingsModal.vue'
 import MacroSettingsModal from '../components/MacroSettingsModal.vue'
@@ -278,7 +256,6 @@ import { extractImportPreflight, formatImportErrorMessage } from '../utils/impor
 import { formatLibraryBookTitle } from '../utils/bookTitle'
 
 const bookStore = useBookStore()
-const router = useRouter()
 const showImport = ref(false)
 const showSettings = ref(false)
 const showResponseStyles = ref(false)
@@ -296,13 +273,7 @@ const editTitle = ref('')
 const titleInput = ref(null)
 const libraryRef = ref(null)
 const profileStatuses = ref({})
-const profileAnalyzingBookId = ref(null)
-const showProfileModal = ref(false)
-const selectedProfileBook = ref(null)
-const profileLoading = ref(false)
-const profileError = ref('')
-const profileMarkdown = ref('')
-const profileSummary = ref('')
+const exportingBookId = ref(null)
 const notification = ref(null)
 const pendingDeleteBook = ref(null)
 const deletingBook = ref(false)
@@ -310,7 +281,6 @@ const deletingBook = ref(false)
 const books = computed(() => bookStore.books)
 const loading = computed(() => bookStore.loading)
 const error = computed(() => bookStore.error)
-const profileHtml = computed(() => renderMarkdown(profileMarkdown.value, selectedProfileBook.value))
 
 const formatBookIndex = (index) => String(index + 1).padStart(2, '0')
 
@@ -371,7 +341,6 @@ let pollingTimer = null
 
 const isTranslating = (book) => book?.status === 'translating'
 const isBackgroundBusy = (book) => ['translating', 'generating_guides'].includes(book?.status)
-const shouldOfferTranslation = (book) => !['translated', 'translating', 'generating_guides'].includes(book?.status)
 
 const statusLabel = (book) => {
   if (book.type === 'generated' && book.agent_stage && !['init', 'ready'].includes(book.agent_stage)) return book.agent_stage
@@ -524,18 +493,17 @@ const handlePackageImport = async (file) => {
   }
 }
 
-const handlePackageExport = async (bookId) => {
-  if (!bookId) return
-  importing.value = true
+const handlePackageExport = async (book) => {
+  if (!book?.id || exportingBookId.value) return
+  exportingBookId.value = book.id
   try {
-    const book = books.value.find((item) => item.id === bookId)
     const safeTitle = (book?.title || 'book').replace(/[^0-9A-Za-z._\-\s]+/g, '_').trim() || 'book'
-    await bookStore.exportBookPackage(bookId, `${safeTitle}-${book?.uuid || bookId}.zip`)
+    await bookStore.exportBookPackage(book.id, `${safeTitle}-${book?.uuid || book.id}.zip`)
     showNotification('图书包已开始下载', 'success')
   } catch (e) {
     showNotification(`图书包导出失败：${importErrorMessage(e)}`, 'error')
   } finally {
-    importing.value = false
+    exportingBookId.value = null
   }
 }
 
@@ -674,24 +642,6 @@ const saveTitle = async (book) => {
   }
 }
 
-const translateBook = async (book) => {
-  try {
-    await bookStore.translateBook(book.id)
-    showNotification('翻译任务已开始', 'success')
-  } catch (e) {
-    showNotification(`无法开始翻译：${e.message}`, 'error')
-  }
-}
-
-const generateBookGuides = async (book) => {
-  try {
-    await bookStore.generateBookGuides(book.id)
-    showNotification('导读生成任务已开始', 'success')
-  } catch (error) {
-    showNotification(`无法生成导读：${error.message}`, 'error')
-  }
-}
-
 const loadLearningProfileStatuses = async () => {
   const entries = await Promise.all(
     books.value.map(async (book) => {
@@ -703,84 +653,6 @@ const loadLearningProfileStatuses = async () => {
     })
   )
   profileStatuses.value = Object.fromEntries(entries.filter(([, status]) => status))
-}
-
-const analyzeLearningProfile = async (book) => {
-  profileAnalyzingBookId.value = book.id
-  try {
-    const result = await bookStore.analyzeLearningProfile(book.id)
-    profileStatuses.value = {
-      ...profileStatuses.value,
-      [book.id]: await bookStore.fetchLearningProfileStatus(book.id)
-    }
-    selectedProfileBook.value = book
-    profileSummary.value = result?.summary || ''
-    profileMarkdown.value = result?.profile_markdown || ''
-    profileError.value = ''
-    profileLoading.value = false
-    showProfileModal.value = true
-    triggerRenderMath()
-    showNotification('学习画像已更新', 'success')
-  } catch (e) {
-    showNotification(`学习画像分析失败：${e.message}`, 'error')
-  } finally {
-    profileAnalyzingBookId.value = null
-  }
-}
-
-const profileErrorMessage = (error) => {
-  const detail = error?.response?.data?.detail
-  if (typeof detail === 'string') return detail
-  return error?.message || 'Learning profile could not be loaded.'
-}
-
-const openLearningProfile = async (book) => {
-  closeMenus()
-  selectedProfileBook.value = book
-  profileMarkdown.value = ''
-  profileSummary.value = ''
-  profileError.value = ''
-  profileLoading.value = true
-  showProfileModal.value = true
-
-  try {
-    const result = await bookStore.fetchLearningProfile(book.id)
-    profileMarkdown.value = result?.markdown || ''
-  } catch (e) {
-    profileError.value = profileErrorMessage(e)
-  } finally {
-    profileLoading.value = false
-    triggerRenderMath()
-  }
-}
-
-const closeLearningProfile = () => {
-  showProfileModal.value = false
-  selectedProfileBook.value = null
-  profileMarkdown.value = ''
-  profileSummary.value = ''
-  profileError.value = ''
-  profileLoading.value = false
-}
-
-const startBookQuiz = async (book) => {
-  try {
-    const target = await bookStore.selectBookQuizTarget(book.id)
-    window.sessionStorage.setItem(`bookQuizTarget:${book.id}`, JSON.stringify(target))
-    await router.push({
-      name: 'reader',
-      params: { id: book.id },
-      query: {
-        reader_type: 'chapter',
-        chapter_id: target.chapter_id,
-        quiz: '1',
-        quiz_mode: 'book',
-        question_type: target.question_type
-      }
-    })
-  } catch (e) {
-    showNotification(`无法开始 Book Quiz：${e.message}`, 'error')
-  }
 }
 
 const requestDeleteBook = (book) => {
@@ -1103,10 +975,76 @@ const deleteBook = async () => {
   gap: 0.5rem;
 }
 
-.secondary-actions {
+.book-quick-links {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.45rem;
+  border-top: 1px solid #dce5ec;
+}
+
+.book-quick-links a {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.38rem;
+  padding: 0.58rem 0.25rem 0.18rem;
+  color: #596b7d;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1;
+  text-decoration: none;
+  transition: color 180ms ease, transform 180ms ease;
+}
+
+.book-quick-links a + a::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.55rem;
+  bottom: 0.05rem;
+  width: 1px;
+  background: #dce5ec;
+}
+
+.book-quick-links a:hover {
+  color: var(--library-accent-dark);
+  transform: translateY(-1px);
+}
+
+.book-quick-links a:active {
+  transform: translateY(0);
+}
+
+.book-quick-links a:focus-visible,
+.book-menu-trigger:focus-visible {
+  outline: 2px solid var(--library-accent);
+  outline-offset: 3px;
+}
+
+.quick-link-icon {
+  width: 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+}
+
+.quick-link-icon svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.65;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.quick-link-alert {
+  width: 5px;
+  height: 5px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #b7791f;
 }
 
 .action-link {
@@ -1151,83 +1089,6 @@ const deleteBook = async () => {
   transform: translateY(-1px);
 }
 
-.action-btn.translate {
-  background: white;
-  color: #1e5664;
-}
-
-.action-btn.translate:hover:not(:disabled) {
-  background: #ecfeff;
-  border-color: #99f6e4;
-}
-
-.action-btn.translate:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.action-btn.notes-btn {
-  background: white;
-  color: #475569;
-}
-
-.action-btn.notes-btn:hover {
-  background: #f8fafc;
-  border-color: #b9c8d6;
-}
-
-.action-btn.profile-btn,
-.action-btn.profile-view-btn,
-.action-btn.book-quiz-btn,
-.action-btn.console-btn {
-  background: white;
-  color: #475569;
-}
-
-.action-btn.profile-btn:hover,
-.action-btn.profile-view-btn:hover,
-.action-btn.book-quiz-btn:hover,
-.action-btn.console-btn:hover {
-  background: #f1f5f9;
-  border-color: #b9c8d6;
-  color: var(--library-ink);
-}
-
-.action-btn.profile-btn:disabled,
-.action-btn.profile-view-btn:disabled {
-  opacity: 0.6;
-  cursor: wait;
-}
-
-.delete-icon-btn {
-  position: absolute;
-  top: 0.9rem;
-  right: 0.9rem;
-  background: white;
-  border: 1px solid #e6edf3;
-  border-radius: 10px;
-  width: 30px;
-  height: 30px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #94a3b8;
-  cursor: pointer;
-  transition: all 0.2s;
-  opacity: 0;
-  z-index: 10;
-}
-
-.book-card:hover .delete-icon-btn {
-  opacity: 1;
-}
-
-.delete-icon-btn:hover {
-  background: #fef2f2;
-  color: #ef4444;
-  border-color: #fee2e2;
-}
-
 .loading-state, .error-state {
   text-align: center;
   padding: 4rem;
@@ -1247,112 +1108,6 @@ const deleteBook = async () => {
   justify-content: center;
   padding: 2rem;
   background: rgba(15, 23, 42, 0.48);
-}
-
-.profile-modal {
-  width: min(760px, 100%);
-  max-height: min(760px, 90vh);
-  display: flex;
-  flex-direction: column;
-  background: white;
-  border-radius: 14px;
-  box-shadow: 0 24px 70px rgba(15, 23, 42, 0.24);
-  overflow: hidden;
-}
-
-.profile-modal-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 1.5rem;
-  padding: 1.5rem 1.75rem;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.profile-modal-kicker {
-  margin: 0 0 0.35rem;
-  color: #64748b;
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.profile-modal-header h2 {
-  margin: 0;
-  color: var(--primary-color);
-  font-size: 1.35rem;
-  line-height: 1.3;
-}
-
-.modal-close-btn {
-  align-self: flex-start;
-  padding: 0.45rem 0.8rem;
-  background: white;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  color: #475569;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.modal-close-btn:hover {
-  background: #f8fafc;
-}
-
-.profile-summary {
-  margin: 1rem 1.75rem 0;
-  padding: 0.75rem 0.9rem;
-  border: 1px solid #bfdbfe;
-  border-radius: 10px;
-  color: #1e3a8a;
-  background: #eff6ff;
-  font-size: 0.88rem;
-  line-height: 1.5;
-}
-
-.profile-state {
-  padding: 2rem 1.75rem;
-  color: #64748b;
-  font-weight: 600;
-}
-
-.profile-error {
-  color: #b91c1c;
-}
-
-.profile-content {
-  overflow: auto;
-  padding: 1.25rem 1.75rem 1.75rem;
-  color: #1e293b;
-  line-height: 1.7;
-}
-
-.profile-content :deep(h1),
-.profile-content :deep(h2),
-.profile-content :deep(h3) {
-  color: var(--primary-color);
-  line-height: 1.35;
-}
-
-.profile-content :deep(h1) {
-  font-size: 1.45rem;
-}
-
-.profile-content :deep(h2) {
-  margin-top: 1.4rem;
-  font-size: 1.2rem;
-}
-
-.profile-content :deep(p),
-.profile-content :deep(ul),
-.profile-content :deep(ol) {
-  margin: 0.65rem 0;
-}
-
-.profile-content :deep(code) {
-  padding: 0.1rem 0.25rem;
-  border-radius: 4px;
-  background: #f1f5f9;
 }
 
 @media (max-width: 640px) {
@@ -1396,22 +1151,19 @@ const deleteBook = async () => {
     grid-template-columns: 1fr;
   }
 
-  .secondary-actions {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .book-quick-links a {
+    gap: 0;
+    font-size: 0.66rem;
+    white-space: nowrap;
+  }
+
+  .book-quick-links .quick-link-icon {
+    display: none;
   }
 
   .modal-overlay {
     padding: 1rem;
     align-items: stretch;
-  }
-
-  .profile-modal {
-    max-height: 100%;
-  }
-
-  .profile-modal-header {
-    flex-direction: column;
-    gap: 1rem;
   }
 }
 </style>
