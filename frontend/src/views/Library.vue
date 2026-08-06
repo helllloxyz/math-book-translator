@@ -4,8 +4,8 @@
       <div class="header-content">
         <img class="home-logo" src="/logo.png" alt="Math Book Translator logo" />
         <div>
-          <h1>我的数学书房</h1>
-          <p>导入、翻译、阅读和整理你的数学书</p>
+          <h1>Interactive Library</h1>
+          <p>翻译、阅读并管理你的数学书</p>
         </div>
       </div>
 
