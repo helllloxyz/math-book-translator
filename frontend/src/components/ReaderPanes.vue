@@ -47,16 +47,6 @@
 
     <template v-else>
       <div ref="leftPaneRef" class="pane source-pane" @scroll="syncPaneScroll('left', $event)">
-        <div
-          class="markdown-body latex-content"
-          :data-content-target="leftContentTarget"
-          :data-annotation-eligible="leftAnnotationEligible ? 'true' : 'false'"
-          :key="leftPaneKey"
-          v-html="leftPaneHtml"
-        ></div>
-      </div>
-
-      <div ref="rightPaneRef" class="pane target-pane" @scroll="syncPaneScroll('right', $event)">
         <div v-if="isGuideDual && guideLoading" class="pane-state">Loading chapter guide...</div>
         <div v-else-if="guideUnavailable" class="pane-state">
           No chapter guide is available for this chapter yet.
@@ -65,6 +55,16 @@
           v-else
           class="markdown-body latex-content"
           :class="{ 'guide-content': isGuideDual }"
+          :data-content-target="leftContentTarget"
+          :data-annotation-eligible="leftAnnotationEligible ? 'true' : 'false'"
+          :key="leftPaneKey"
+          v-html="leftPaneHtml"
+        ></div>
+      </div>
+
+      <div ref="rightPaneRef" class="pane target-pane" @scroll="syncPaneScroll('right', $event)">
+        <div
+          class="markdown-body latex-content"
           :data-content-target="rightContentTarget"
           :data-annotation-eligible="rightAnnotationEligible ? 'true' : 'false'"
           :key="rightPaneKey"
@@ -165,22 +165,28 @@ const translatedOrSourceHtml = computed(() => {
 
 const leftPaneHtml = computed(() => {
   if (!isGuideDual.value) return props.renderedSource
-  return isSelectedGuideDual.value ? props.renderedSource : translatedOrSourceHtml.value
+  return isSelectedGuideDual.value ? translatedOrSourceHtml.value : props.renderedGuide
 })
 
 const rightPaneHtml = computed(() => {
   if (!isGuideDual.value) return translatedOrSourceHtml.value
-  return isSelectedGuideDual.value ? translatedOrSourceHtml.value : props.renderedGuide
+  return isSelectedGuideDual.value ? props.renderedSource : translatedOrSourceHtml.value
 })
 
 const guideUnavailable = computed(() => {
-  return isGuideDual.value && !String(rightPaneHtml.value || '').trim()
+  return isGuideDual.value && !String(leftPaneHtml.value || '').trim()
 })
 
-const leftAnnotationEligible = computed(() => !isGuideDual.value || !isSelectedGuideDual.value)
-const rightAnnotationEligible = computed(() => !isGuideDual.value || isSelectedGuideDual.value)
-const leftContentTarget = computed(() => effectiveViewMode.value === 'dual' ? 'raw' : 'translated')
-const rightContentTarget = computed(() => 'translated')
+const leftAnnotationEligible = computed(() => !isGuideDual.value || isSelectedGuideDual.value)
+const rightAnnotationEligible = computed(() => !isGuideDual.value || !isSelectedGuideDual.value)
+const leftContentTarget = computed(() => {
+  if (effectiveViewMode.value === 'dual') return 'raw'
+  return isSelectedGuideDual.value ? 'translated' : 'guide'
+})
+const rightContentTarget = computed(() => {
+  if (!isGuideDual.value) return 'translated'
+  return isSelectedGuideDual.value ? 'raw' : 'translated'
+})
 
 const emitScrollProgress = (element) => {
   if (!element) return
@@ -213,13 +219,13 @@ const syncPaneScroll = (side, event) => {
 
 const leftPaneKey = computed(() => {
   return isGuideDual.value
-    ? `translated-${props.currentItem?.id || 'missing'}`
+    ? `guide-${props.guideItem?.id || props.currentItem?.id || 'missing'}`
     : `source-${props.currentItem?.id || 'missing'}`
 })
 
 const rightPaneKey = computed(() => {
   return isGuideDual.value
-    ? `guide-${props.guideItem?.id || props.currentItem?.id || 'missing'}`
+    ? `translated-${props.currentItem?.id || 'missing'}`
     : `target-${props.currentItem?.id || 'missing'}`
 })
 </script>

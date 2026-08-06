@@ -527,3 +527,30 @@ direct_child_guide_inputs:
         await checkpoint(book_guides)
         guides = [*generated_guides, *book_guides]
         return await GuideCompilerService.write_guides(book.uuid, guides)
+
+    @staticmethod
+    async def generate_chapter_guide(book, chapter, translator) -> list[dict[str, str]]:
+        """Generate or replace the compact guide belonging to one chapter only."""
+        chapter_context = await ChapterSourceService.chapter_context(book.uuid, chapter)
+        if not chapter_context["body"]:
+            raise ValueError("Chapter body is missing")
+
+        system_prompt = PromptRegistry.get(PromptId.TOP_DOWN_GUIDE).system
+        user_prompt = GuideCompilerService.build_chapter_guide_prompt(book.title, chapter_context)
+        guides = [
+            GuideCompilerService._force_guide_scope(
+                guide,
+                "chapter",
+                str(chapter.chapter_index),
+            )
+            for guide in await GuideCompilerService._complete_guides(
+                translator,
+                user_prompt,
+                system_prompt,
+            )
+        ]
+        return await GuideCompilerService.write_guides(
+            book.uuid,
+            guides,
+            merge_manifest=True,
+        )

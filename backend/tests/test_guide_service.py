@@ -1,6 +1,7 @@
 import pytest
 
 from app.services.book_storage import BookStorage
+from app.services.guide_compiler_service import GuideCompilerService
 from app.services.guide_service import GuideService
 
 
@@ -67,3 +68,30 @@ async def test_list_guides_reads_manifest_scope_metadata(tmp_path, monkeypatch):
             "source_title": "Overview",
         }
     ]
+
+
+@pytest.mark.asyncio
+async def test_generate_chapter_guide_writes_only_the_requested_chapter(tmp_path, monkeypatch):
+    monkeypatch.setenv("STORAGE_DIR", str(tmp_path))
+    translated = tmp_path / "book-uuid" / "book_trans_md" / "2_trans_zh.md"
+    translated.parent.mkdir(parents=True)
+    translated.write_text("本章译文。", encoding="utf-8")
+
+    class Book:
+        uuid = "book-uuid"
+        title = "Test Book"
+
+    class Chapter:
+        chapter_index = "2"
+        title_zh = "第二章"
+        title_en = "Chapter Two"
+
+    class Translator:
+        async def complete(self, user_prompt, system_prompt, temperature=0.3):
+            return '''{"guides": [{"slug": "preview", "title": "读前 60 秒", "markdown": "# 读前 60 秒"}]}'''
+
+    guides = await GuideCompilerService.generate_chapter_guide(Book(), Chapter(), Translator())
+
+    assert [guide["scope_type"] for guide in guides] == ["chapter"]
+    assert [guide["scope_id"] for guide in guides] == ["2"]
+    assert (tmp_path / "book-uuid" / "book_guides" / "chapter-2-preview.md").exists()

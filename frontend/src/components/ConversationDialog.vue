@@ -20,18 +20,22 @@
           v-if="canGoSource"
           type="button"
           class="source-button"
+          title="Go to source"
+          aria-label="Go to source"
           @click="emit('go-source', card)"
         >
-          Go to source
+          <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V4H6.5A2.5 2.5 0 0 0 4 6.5z" /><path d="M4 6.5v13" /></svg>
         </button>
 
         <button
           v-if="canDelete"
           type="button"
           class="delete-conversation-button"
+          title="Delete"
+          aria-label="Delete"
           @click="emit('delete', card)"
         >
-          Delete
+          <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7l1-3h4l1 3" /></svg>
         </button>
 
       </aside>
@@ -52,15 +56,16 @@
                 v-if="canGoSource"
                 type="button"
                 class="source-button"
+                title="Go to source"
+                aria-label="Go to source"
                 @click="emit('go-source', card)"
               >
-                Go to source
+                <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V4H6.5A2.5 2.5 0 0 0 4 6.5z" /><path d="M4 6.5v13" /></svg>
               </button>
 
-              <details class="standalone-details">
-                <summary>
-                  <span>详细信息</span>
-                  <small>{{ metadataFields.length + 2 }}</small>
+              <details class="standalone-details" title="详细信息">
+                <summary aria-label="详细信息">
+                  <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5" /><path d="M12 10.5v5M12 7.5h.01" /></svg>
                 </summary>
                 <dl class="standalone-details-grid">
                   <div v-for="field in metadataFields" :key="field.label">
@@ -82,9 +87,11 @@
                 v-if="canDelete"
                 type="button"
                 class="delete-conversation-button"
+                title="Delete"
+                aria-label="Delete"
                 @click="emit('delete', card)"
               >
-                Delete
+                <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7l1-3h4l1 3" /></svg>
               </button>
             </div>
             <button v-if="!standalone" type="button" class="close-button" aria-label="Close conversation" @click="emit('close')">
@@ -564,19 +571,16 @@ onUnmounted(() => {
 }
 
 .standalone-details summary {
-  min-height: 30px;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 0.42rem 0.72rem;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  padding: 0;
   border: 0.5px solid rgba(102, 84, 66, 0.18);
   border-radius: 8px;
   background: rgba(255, 253, 249, 0.72);
   color: #75695d;
   cursor: pointer;
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1.3;
   list-style: none;
   transition: border-color 180ms ease, background-color 180ms ease, color 180ms ease;
 }
@@ -585,29 +589,11 @@ onUnmounted(() => {
   display: none;
 }
 
-.standalone-details summary::after {
-  content: '⌄';
-  color: #998a7b;
-  font-size: 12px;
-  transform: translateY(-1px);
-  transition: transform 180ms ease;
-}
-
-.standalone-details[open] summary::after {
-  transform: rotate(180deg) translateY(-1px);
-}
-
 .standalone-details summary:hover,
 .standalone-details[open] summary {
   border-color: rgba(102, 84, 66, 0.32);
   background: #ffffff;
   color: #29231d;
-}
-
-.standalone-details summary small {
-  color: #a09284;
-  font: inherit;
-  font-size: 10px;
 }
 
 .standalone-details-grid {
@@ -836,28 +822,26 @@ onUnmounted(() => {
 }
 
 .source-button {
-  width: 100%;
-  min-height: 24px;
+  width: 32px;
+  height: 32px;
+  display: inline-grid;
+  place-items: center;
   border: 0.5px solid var(--dialog-border);
-  border-radius: 999px;
+  border-radius: 8px;
   background: var(--dialog-bg-secondary);
   color: var(--dialog-text-secondary);
   cursor: pointer;
-  font: inherit;
-  font-size: 0.82rem;
-  font-weight: 500;
-  line-height: 1;
-  padding: 0.35rem 0.65rem;
+  padding: 0;
 }
 
 .standalone-actions .source-button,
 .standalone-actions .delete-conversation-button {
-  width: auto;
-  min-height: 30px;
+  width: 30px;
+  height: 30px;
   border-color: rgba(102, 84, 66, 0.18);
   background: rgba(255, 253, 249, 0.72);
   color: #5f554a;
-  padding: 0.42rem 0.78rem;
+  padding: 0;
 }
 
 .standalone-actions .source-button:hover,
@@ -873,18 +857,26 @@ onUnmounted(() => {
 }
 
 .delete-conversation-button {
-  width: 100%;
-  min-height: 24px;
+  width: 32px;
+  height: 32px;
+  display: inline-grid;
+  place-items: center;
   border: 0.5px solid var(--dialog-border);
-  border-radius: 999px;
+  border-radius: 8px;
   background: var(--dialog-bg-secondary);
   color: var(--dialog-text-secondary);
   cursor: pointer;
-  font: inherit;
-  font-size: 0.82rem;
-  font-weight: 500;
-  line-height: 1;
-  padding: 0.35rem 0.65rem;
+  padding: 0;
+}
+
+.action-icon {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .delete-conversation-button:hover {

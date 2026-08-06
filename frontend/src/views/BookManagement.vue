@@ -94,15 +94,7 @@
         </div>
       </dl>
 
-      <section id="status" class="management-section status-section">
-        <header class="section-heading">
-          <div>
-            <p class="section-index">01 / STATUS</p>
-            <h2>内容状态与维护</h2>
-          </div>
-          <p>状态按实际文件和生成时间计算，不只依赖数据库中的单一状态字段。</p>
-        </header>
-
+      <section id="status" class="management-section status-section" aria-label="内容状态与维护">
         <div class="status-layout">
           <div class="pipeline" aria-label="内容处理流程">
             <article class="pipeline-row">
@@ -230,9 +222,12 @@
                   <small>{{ chapter.quiz.attempts ? `平均 ${formatPercent(chapter.quiz.average_score)}` : '暂无作答' }}</small>
                 </td>
                 <td class="chapter-actions-cell">
-                  <router-link :to="chapterReaderRoute(chapter)" title="阅读本章" aria-label="阅读本章">
+                  <router-link :to="chapterReaderRoute(chapter)" target="_blank" rel="noopener" title="在新标签页中打开本章" aria-label="在新标签页中打开本章">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V4H6.5A2.5 2.5 0 0 0 4 6.5z" /><path d="M4 6.5v13" /></svg>
                   </router-link>
+                  <button v-if="chapter.guide.status !== 'ready'" type="button" :title="chapter.guide.status === 'missing' ? '生成本章导读' : '重新生成本章导读'" :aria-label="chapter.guide.status === 'missing' ? '生成本章导读' : '重新生成本章导读'" :disabled="snapshot.book.is_busy || !chapter.source.exists || Boolean(loadingAction)" @click="generateChapterGuide(chapter)">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3-1.1 4.1L7 8.2l3.9 1.1L12 13l1.1-3.7L17 8.2l-3.9-1.1zM5 15l-.7 2.3L2 18l2.3.7L5 21l.7-2.3L8 18l-2.3-.7zM19 14l-.9 3.1L15 18l3.1.9L19 22l.9-3.1L23 18l-3.1-.9z" /></svg>
+                  </button>
                   <button type="button" title="重新翻译本章" aria-label="重新翻译本章" :disabled="snapshot.book.is_busy || !chapter.source.exists" @click="requestChapterRetranslation(chapter)">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8.1 8.1 0 1 0 .1 3M20 4v7h-7" /></svg>
                   </button>
@@ -532,6 +527,19 @@ const requestChapterRetranslation = (chapter) => {
   }
 }
 
+const generateChapterGuide = async (chapter) => {
+  loadingAction.value = `guide-${chapter.id}`
+  try {
+    await bookStore.generateChapterGuide(bookId.value, chapter.id)
+    showNotice(`${chapter.chapter_index} 的章节导读已生成`)
+    await loadSnapshot(true)
+  } catch (err) {
+    showNotice(`无法生成章节导读：${err.message}`, 'error')
+  } finally {
+    loadingAction.value = ''
+  }
+}
+
 const confirmRegeneration = async () => {
   const pending = confirmation.value
   if (!pending) return
@@ -819,7 +827,7 @@ onBeforeUnmount(() => {
 .chapter-table td small { display: block; max-width: 36ch; margin-top: .3rem; overflow: hidden; color: var(--color-faint); font-size: .64rem; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
 .compact-state { padding: .22rem .48rem; }
 .quiz-attempt-count { font-family: var(--font-mono); font-size: 1rem; }
-.chapter-actions-cell { min-width: 82px !important; white-space: nowrap; }
+.chapter-actions-cell { min-width: 118px !important; white-space: nowrap; }
 .chapter-actions-cell a,
 .chapter-actions-cell button { width: 32px; height: 32px; display: inline-grid; place-items: center; margin-left: .25rem; border: 1px solid var(--color-line); border-radius: 6px; color: var(--color-muted); background: var(--color-surface-raised); cursor: pointer; }
 .chapter-actions-cell a:hover,

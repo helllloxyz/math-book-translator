@@ -293,6 +293,16 @@ export const useBookStore = defineStore('book', {
         throw err
       }
     },
+    async generateChapterGuide(bookId, chapterId) {
+      try {
+        const response = await apiClient.post(`/books/${bookId}/chapters/${chapterId}/guides`)
+        return response.data.guides
+      } catch (err) {
+        const message = err.response?.data?.detail || err.message
+        this.error = message
+        throw new Error(message)
+      }
+    },
     async fetchBookGuides(bookId) {
       try {
         const response = await apiClient.get(`/books/${bookId}/guides`)

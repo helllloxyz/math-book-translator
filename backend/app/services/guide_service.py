@@ -82,3 +82,7 @@ class GuideService:
     @staticmethod
     async def generate_top_down_guides(book, chapters, translator) -> list[dict[str, str]]:
         return await GuideCompilerService.generate_top_down_guides(book, chapters, translator)
+
+    @staticmethod
+    async def generate_chapter_guide(book, chapter, translator) -> list[dict[str, str]]:
+        return await GuideCompilerService.generate_chapter_guide(book, chapter, translator)

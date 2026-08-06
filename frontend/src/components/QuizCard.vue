@@ -84,8 +84,8 @@ const renderMath = () => {
 const submitAnswer = () => {
   const answer = draft.value.trim()
   if (!answer || props.card.loading) return
-  emit('submit', props.card, answer)
   draft.value = ''
+  emit('submit', props.card, answer)
 }
 
 watch(() => props.card.prompt, renderMath)
