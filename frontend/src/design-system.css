@@ -229,7 +229,7 @@
 }
 
 #app .book-sequence {
-  margin: 0 2.75rem 1rem 0;
+  margin: 0 10.5rem 1rem 0;
   color: var(--color-accent-dark);
   font-family: var(--font-mono);
   font-size: 0.68rem;
@@ -525,11 +525,17 @@
   right: 0;
 }
 
-#app .book-menu-wrap {
+#app .book-card-toolbar {
   position: absolute;
   top: 1rem;
   right: 1rem;
   z-index: 3;
+  display: flex;
+  align-items: center;
+}
+
+#app .book-menu-wrap {
+  position: relative;
 }
 
 #app .book-menu-trigger {

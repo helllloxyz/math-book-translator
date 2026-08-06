@@ -62,40 +62,93 @@
     <div v-else class="book-grid">
       <div v-for="(book, index) in books" :key="book.id" class="book-card">
         <div class="book-card-main">
-          <div class="action-menu-wrap book-menu-wrap" @click.stop>
-            <button
-              class="book-menu-trigger"
-              type="button"
-              :aria-label="`管理《${book.title}》`"
-              :aria-expanded="openBookMenuId === book.id"
-              aria-haspopup="menu"
-              @click="toggleBookMenu(book.id)"
-            >
-              <span aria-hidden="true">•••</span>
-              <span v-if="profileStatuses[book.id]?.should_analyze" class="book-menu-alert" aria-hidden="true"></span>
-            </button>
-            <div v-if="openBookMenuId === book.id" class="action-menu book-action-menu" role="menu">
-              <p class="menu-section-label">图书文件</p>
-              <button class="menu-item" role="menuitem" @click="startEditing(book); closeMenus()">重命名</button>
-              <button
-                class="menu-item"
-                role="menuitem"
-                :disabled="exportingBookId === book.id"
-                @click="handlePackageExport(book); closeMenus()"
+          <div class="book-card-toolbar">
+            <nav class="book-quick-links" :aria-label="`《${book.title}》学习入口`">
+              <router-link
+                :to="{ name: 'book-management', params: { id: book.id } }"
+                target="_blank"
+                rel="noopener"
+                class="book-icon-link"
+                aria-label="内容状态（在新标签页打开）"
+                data-tooltip="内容状态"
               >
-                {{ exportingBookId === book.id ? '正在导出…' : '导出图书包' }}
-              </button>
-              <button
-                v-if="book.type === 'generated'"
-                class="menu-item console-btn"
-                role="menuitem"
-                title="Agent Console"
-                @click="openConsole(book); closeMenus()"
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M5.5 15.8a7.5 7.5 0 1 1 13 0" />
+                  <path d="m12 13 3.2-3.2" />
+                  <path d="M4.8 19h14.4" />
+                  <path d="M7 7.5 8.4 9M17 7.5 15.6 9M12 4.5V7" />
+                </svg>
+              </router-link>
+              <router-link
+                :to="{ name: 'notes', params: { id: book.id } }"
+                target="_blank"
+                rel="noopener"
+                class="book-icon-link"
+                aria-label="笔记（在新标签页打开）"
+                data-tooltip="笔记"
               >
-                Agent Console
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M6.5 3.5h9l3 3v14h-12z" />
+                  <path d="M15.5 3.5v3h3M9.5 11h6M9.5 15h4" />
+                  <path d="M4 7.5h2.5M4 12h2.5M4 16.5h2.5" />
+                </svg>
+              </router-link>
+              <router-link
+                :to="{ name: 'book-learning', params: { id: book.id } }"
+                target="_blank"
+                rel="noopener"
+                class="book-icon-link"
+                aria-label="Quiz 与学习画像（在新标签页打开）"
+                data-tooltip="Quiz · 学习画像"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 3.5 14 7l4-.2-.3 4 2.8 2.7-3.3 2.2.8 3.8-4-.7-2 3.2-2-3.2-4 .7.8-3.8-3.3-2.2 2.8-2.7-.3-4 4 .2z" />
+                  <path d="M10.5 10.3a1.7 1.7 0 1 1 2.2 1.6c-.7.3-.7.8-.7 1.3M12 16.2h.01" />
+                </svg>
+                <span v-if="profileStatuses[book.id]?.should_analyze" class="quick-link-alert" aria-hidden="true"></span>
+              </router-link>
+            </nav>
+
+            <div class="action-menu-wrap book-menu-wrap" @click.stop>
+              <button
+                class="book-menu-trigger"
+                type="button"
+                :aria-label="`管理《${book.title}》`"
+                :aria-expanded="openBookMenuId === book.id"
+                aria-haspopup="menu"
+                data-tooltip="更多操作"
+                @click="toggleBookMenu(book.id)"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="5" cy="12" r="1.25" />
+                  <circle cx="12" cy="12" r="1.25" />
+                  <circle cx="19" cy="12" r="1.25" />
+                </svg>
+                <span v-if="profileStatuses[book.id]?.should_analyze" class="book-menu-alert" aria-hidden="true"></span>
               </button>
-              <div class="menu-divider"></div>
-              <button class="menu-item menu-item-danger" role="menuitem" @click="requestDeleteBook(book); closeMenus()">删除图书</button>
+              <div v-if="openBookMenuId === book.id" class="action-menu book-action-menu" role="menu">
+                <p class="menu-section-label">图书文件</p>
+                <button class="menu-item" role="menuitem" @click="startEditing(book); closeMenus()">重命名</button>
+                <button
+                  class="menu-item"
+                  role="menuitem"
+                  :disabled="exportingBookId === book.id"
+                  @click="handlePackageExport(book); closeMenus()"
+                >
+                  {{ exportingBookId === book.id ? '正在导出…' : '导出图书包' }}
+                </button>
+                <button
+                  v-if="book.type === 'generated'"
+                  class="menu-item console-btn"
+                  role="menuitem"
+                  title="Agent Console"
+                  @click="openConsole(book); closeMenus()"
+                >
+                  Agent Console
+                </button>
+                <div class="menu-divider"></div>
+                <button class="menu-item menu-item-danger" role="menuitem" @click="requestDeleteBook(book); closeMenus()">删除图书</button>
+              </div>
             </div>
           </div>
 
@@ -145,42 +198,6 @@
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 3h6a4 4 0 0 1 4 4v14a4 4 0 0 0-4-4H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a4 4 0 0 1 4-4h6z"></path></svg>
             <span>继续阅读</span>
           </router-link>
-          <nav class="book-quick-links" :aria-label="`《${book.title}》学习入口`">
-            <router-link
-              :to="{ name: 'book-management', params: { id: book.id } }"
-              target="_blank"
-              rel="noopener"
-              title="在新标签页打开内容状态"
-            >
-              <span class="quick-link-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24"><path d="M4 19V9m6 10V5m6 14v-7m4 7H2" /></svg>
-              </span>
-              <span>状态</span>
-            </router-link>
-            <router-link
-              :to="{ name: 'notes', params: { id: book.id } }"
-              target="_blank"
-              rel="noopener"
-              title="在新标签页打开笔记"
-            >
-              <span class="quick-link-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5" /></svg>
-              </span>
-              <span>笔记</span>
-            </router-link>
-            <router-link
-              :to="{ name: 'book-learning', params: { id: book.id } }"
-              target="_blank"
-              rel="noopener"
-              title="在新标签页打开 Quiz 评估与学习画像"
-            >
-              <span class="quick-link-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9M12 7v5l3 2M17 3h4v4" /></svg>
-              </span>
-              <span>Quiz · 画像</span>
-              <span v-if="profileStatuses[book.id]?.should_analyze" class="quick-link-alert" aria-label="画像有新证据待分析"></span>
-            </router-link>
-          </nav>
         </div>
       </div>
     </div>
@@ -975,74 +992,113 @@ const deleteBook = async () => {
   gap: 0.5rem;
 }
 
-.book-quick-links {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  border-top: 1px solid #dce5ec;
-}
-
-.book-quick-links a {
-  position: relative;
-  min-width: 0;
+.book-card-toolbar {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  z-index: 3;
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 0.38rem;
-  padding: 0.58rem 0.25rem 0.18rem;
+  gap: 0.2rem;
+}
+
+.book-quick-links {
+  display: flex;
+  align-items: center;
+  gap: 0.12rem;
+  padding-right: 0.22rem;
+  border-right: 1px solid #dce5ec;
+}
+
+.book-quick-links .book-icon-link {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
+  border-radius: 9px;
   color: #596b7d;
-  font-size: 0.7rem;
-  font-weight: 700;
-  line-height: 1;
   text-decoration: none;
-  transition: color 180ms ease, transform 180ms ease;
+  transition: color 180ms ease, background 180ms ease, transform 180ms ease;
 }
 
-.book-quick-links a + a::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0.55rem;
-  bottom: 0.05rem;
-  width: 1px;
-  background: #dce5ec;
-}
-
-.book-quick-links a:hover {
+.book-quick-links .book-icon-link:hover {
   color: var(--library-accent-dark);
+  background: #eef4ff;
   transform: translateY(-1px);
 }
 
-.book-quick-links a:active {
+.book-quick-links .book-icon-link:active {
   transform: translateY(0);
 }
 
-.book-quick-links a:focus-visible,
+.book-quick-links .book-icon-link:focus-visible,
 .book-menu-trigger:focus-visible {
   outline: 2px solid var(--library-accent);
-  outline-offset: 3px;
+  outline-offset: 2px;
 }
 
-.quick-link-icon {
-  width: 16px;
-  height: 16px;
-  display: grid;
-  place-items: center;
-}
-
-.quick-link-icon svg {
-  width: 15px;
-  height: 15px;
+.book-icon-link svg,
+.book-menu-trigger svg {
+  width: 18px;
+  height: 18px;
   fill: none;
   stroke: currentColor;
-  stroke-width: 1.65;
+  stroke-width: 1.7;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
 
+.book-menu-trigger svg circle {
+  fill: currentColor;
+  stroke: none;
+}
+
+.book-icon-link::after,
+.book-menu-trigger::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: calc(100% + 0.48rem);
+  left: 50%;
+  z-index: 45;
+  width: max-content;
+  max-width: 11rem;
+  padding: 0.36rem 0.5rem;
+  border-radius: 7px;
+  color: #fff;
+  background: #263142;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.16);
+  font-size: 0.68rem;
+  font-weight: 600;
+  line-height: 1.2;
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, -3px);
+  transition: opacity 140ms ease, transform 140ms ease;
+  white-space: nowrap;
+}
+
+.book-icon-link:hover::after,
+.book-icon-link:focus-visible::after,
+.book-menu-trigger:hover::after,
+.book-menu-trigger:focus-visible::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.book-menu-trigger[aria-expanded="true"]::after {
+  display: none;
+}
+
 .quick-link-alert {
-  width: 5px;
-  height: 5px;
-  flex: 0 0 auto;
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border: 1px solid #fff;
   border-radius: 50%;
   background: #b7791f;
 }
@@ -1151,14 +1207,14 @@ const deleteBook = async () => {
     grid-template-columns: 1fr;
   }
 
-  .book-quick-links a {
-    gap: 0;
-    font-size: 0.66rem;
-    white-space: nowrap;
+  .book-card-toolbar {
+    top: 0.85rem;
+    right: 0.85rem;
   }
 
-  .book-quick-links .quick-link-icon {
-    display: none;
+  .book-quick-links .book-icon-link {
+    width: 36px;
+    height: 36px;
   }
 
   .modal-overlay {
