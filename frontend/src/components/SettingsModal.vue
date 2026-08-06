@@ -3,30 +3,30 @@
     <div class="modal-content card">
       <div class="modal-header">
         <div>
-          <p class="modal-kicker">Workspace</p>
-          <h2>Application Settings</h2>
+          <p class="modal-kicker">应用设置</p>
+          <h2>模型与存储</h2>
         </div>
-        <button class="close-btn" @click="$emit('close')" title="Close">×</button>
+        <button class="close-btn" @click="$emit('close')" title="关闭" aria-label="关闭">×</button>
       </div>
       
       <div class="modal-body">
         <form @submit.prevent="saveSettings" class="settings-form">
           <section class="storage-strip">
             <div class="field-heading">
-              <label>Default Storage Path</label>
-              <small>Server-side book, translation, guide, and reader files.</small>
+              <label>图书存储路径</label>
+              <small>用于保存服务端的图书、译文、导读和阅读数据。</small>
             </div>
             <input
               type="text"
               v-model="settings.storagePath"
-              placeholder="e.g. ./storage"
+              placeholder="例如：./storage"
               class="modal-input"
             />
           </section>
 
           <section class="settings-grid">
             <aside class="task-panel">
-              <div class="section-label">Model Provider</div>
+              <div class="section-label">模型服务</div>
               <button
                 v-for="provider in providerNavigation"
                 :key="provider.id"
@@ -37,7 +37,7 @@
               >
                 <span>{{ provider.label }}</span>
                 <span class="mini-state" :class="{ configured: provider.configured }">
-                  {{ provider.configured ? 'set' : 'none' }}
+                  {{ provider.configured ? '已配置' : '未配置' }}
                 </span>
               </button>
 
@@ -49,8 +49,8 @@
                 :class="{ active: activeSection === 'defaults' }"
                 @click="activeSection = 'defaults'"
               >
-                <span>Default Options</span>
-                <span class="mini-state configured">map</span>
+                <span>任务模型</span>
+                <span class="mini-state configured">分配</span>
               </button>
             </aside>
 
@@ -58,19 +58,19 @@
             <div v-if="activeSection === 'providers'" class="provider-panel">
               <div class="panel-title-row">
                 <div>
-                  <div class="section-label">Provider Profile</div>
+                  <div class="section-label">服务配置</div>
                   <p>{{ providerPanelDescription }}</p>
                 </div>
                 <span class="status-pill" :class="{ configured: credentialForProvider }">
-                  {{ selectedProvider ? (credentialForProvider ? 'Configured' : 'Needs Key') : 'Select Provider' }}
+                  {{ selectedProvider ? (credentialForProvider ? '已配置' : '需要密钥') : '请选择服务' }}
                 </span>
               </div>
 
               <div class="compact-fields">
                 <div v-if="isCompatiblePanel" class="form-group">
-                  <label>LLM Provider</label>
+                  <label>模型服务商</label>
                   <select v-model="selectedProviderId" class="modal-input">
-                    <option value="" disabled>Select compatible provider</option>
+                    <option value="" disabled>选择兼容服务商</option>
                     <option v-for="provider in compatibleProviders" :key="provider.provider_id" :value="provider.provider_id">
                       {{ provider.label }}
                     </option>
@@ -78,7 +78,7 @@
                 </div>
 
                 <div v-if="!selectedProvider" class="form-group field-wide empty-provider-state">
-                  Select a provider from the left panel or choose one OpenAI-compatible provider above.
+                  请从左侧选择服务商，或在上方选择 OpenAI 兼容服务。
                 </div>
 
                 <div v-if="selectedProvider" class="form-group">
@@ -103,17 +103,17 @@
                 </div>
 
                 <div v-if="selectedProvider" class="form-group field-wide">
-                  <label>Model Name</label>
+                  <label>模型名称</label>
                   <div v-if="availableModels.length > 0" class="model-selection">
                     <select v-model="selectedModel" class="modal-input">
                       <option v-for="m in availableModels" :key="m" :value="m">{{ m }}</option>
-                      <option v-if="selectedProvider?.allow_custom_model" value="__custom">-- Custom Model --</option>
+                      <option v-if="selectedProvider?.allow_custom_model" value="__custom">自定义模型</option>
                     </select>
                     <input
                       v-if="selectedModel === '__custom'"
                       type="text"
                       v-model="customModelName"
-                      placeholder="Enter custom model name"
+                      placeholder="输入自定义模型名称"
                       class="modal-input mt-2"
                     />
                   </div>
@@ -131,8 +131,8 @@
             <div v-else class="provider-panel defaults-panel">
               <div class="panel-title-row">
                 <div>
-                  <div class="section-label">Default Options</div>
-                  <p>Each group uses one model configuration for all listed usages. Groups set to Use Default inherit the fallback model.</p>
+                  <div class="section-label">任务模型</div>
+                  <p>为不同任务分配模型配置；选择“使用默认模型”的任务会继承下方的默认配置。</p>
                 </div>
               </div>
 
@@ -142,7 +142,7 @@
                   <small>{{ defaultProfileOption.description }}</small>
                 </div>
                 <select v-model="taskProfileSelections.default" class="modal-input">
-                  <option value="" disabled>Select default model</option>
+                  <option value="" disabled>选择默认模型</option>
                   <option v-for="profile in configuredModelProfiles" :key="profile.key" :value="profile.key">
                     {{ profile.label }}
                   </option>
@@ -164,7 +164,7 @@
                     </div>
                   </div>
                   <select v-model="taskProfileSelections[group.id]" class="modal-input">
-                    <option value="__default">Use Default</option>
+                    <option value="__default">使用默认模型</option>
                     <option v-for="profile in configuredModelProfiles" :key="profile.key" :value="profile.key">
                       {{ profile.label }}
                     </option>

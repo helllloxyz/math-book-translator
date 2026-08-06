@@ -4,8 +4,8 @@
       <div class="header-content">
         <img class="home-logo" src="/logo.png" alt="Math Book Translator logo" />
         <div>
-          <h1>Interactive Library</h1>
-          <p>翻译、阅读并管理你的数学书</p>
+          <h1>我的数学书房</h1>
+          <p>导入、翻译、阅读和整理你的数学书</p>
         </div>
       </div>
 
@@ -14,23 +14,21 @@
           <button
             class="icon-btn tools-menu-btn"
             type="button"
-            title="Library tools"
+            title="打开偏好设置"
+            aria-label="打开偏好设置"
             :aria-expanded="headerToolsOpen"
             aria-haspopup="menu"
             @click="toggleHeaderTools"
           >
-            工具与设置
+            偏好设置
             <span class="menu-chevron" aria-hidden="true">⌄</span>
           </button>
           <div v-if="headerToolsOpen" class="action-menu header-tools-menu" role="menu">
-            <button class="menu-item response-styles-btn" role="menuitem" @click="showResponseStyles = true; closeMenus()" title="Response Styles">
-              Response Styles
+            <button class="menu-item response-styles-btn" role="menuitem" @click="showResponseStyles = true; closeMenus()" title="管理回复风格">
+              回复风格
             </button>
-            <button class="menu-item settings-btn" role="menuitem" @click="showSettings = true; closeMenus()" title="Settings">
-              设置
-            </button>
-            <button class="menu-item ai-author-btn" role="menuitem" @click="handleStartAgent(); closeMenus()" title="AI Author">
-              AI Author
+            <button class="menu-item settings-btn" role="menuitem" @click="showSettings = true; closeMenus()" title="配置模型与存储">
+              模型与存储
             </button>
           </div>
         </div>
@@ -137,15 +135,6 @@
                 >
                   {{ exportingBookId === book.id ? '正在导出…' : '导出图书包' }}
                 </button>
-                <button
-                  v-if="book.type === 'generated'"
-                  class="menu-item console-btn"
-                  role="menuitem"
-                  title="Agent Console"
-                  @click="openConsole(book); closeMenus()"
-                >
-                  Agent Console
-                </button>
                 <div class="menu-divider"></div>
                 <button class="menu-item menu-item-danger" role="menuitem" @click="requestDeleteBook(book); closeMenus()">删除图书</button>
               </div>
@@ -251,13 +240,6 @@
       @save="onSaveResponseStyles"
     />
 
-    <AgentConsole
-      :show="showConsole"
-      :bookId="selectedBook?.id"
-      :bookTitle="selectedBook?.title"
-      @close="showConsole = false"
-    />
-
   </div>
 </template>
 
@@ -268,7 +250,6 @@ import { renderMath } from '../utils/renderer'
 import ImportModal from '../components/ImportModal.vue'
 import SettingsModal from '../components/SettingsModal.vue'
 import MacroSettingsModal from '../components/MacroSettingsModal.vue'
-import AgentConsole from '../components/AgentConsole.vue'
 import { extractImportPreflight, formatImportErrorMessage } from '../utils/importPreflight'
 import { formatLibraryBookTitle } from '../utils/bookTitle'
 
@@ -276,10 +257,8 @@ const bookStore = useBookStore()
 const showImport = ref(false)
 const showSettings = ref(false)
 const showResponseStyles = ref(false)
-const showConsole = ref(false)
 const headerToolsOpen = ref(false)
 const openBookMenuId = ref(null)
-const selectedBook = ref(null)
 const uploading = ref(false)
 const importing = ref(false)
 const preflightWarning = ref(null)
@@ -360,7 +339,6 @@ const isTranslating = (book) => book?.status === 'translating'
 const isBackgroundBusy = (book) => ['translating', 'generating_guides'].includes(book?.status)
 
 const statusLabel = (book) => {
-  if (book.type === 'generated' && book.agent_stage && !['init', 'ready'].includes(book.agent_stage)) return book.agent_stage
   const labels = {
     loaded: '待翻译',
     translating: '翻译中',
@@ -415,11 +393,6 @@ onBeforeUnmount(() => {
   if (notificationTimer) window.clearTimeout(notificationTimer)
   document.removeEventListener('click', closeMenus)
 })
-
-const handleStartAgent = () => {
-  selectedBook.value = null // Null bookId triggers initialization mode in Console
-  showConsole.value = true
-}
 
 const closeImportModal = () => {
   showImport.value = false
@@ -630,11 +603,6 @@ const onSaveResponseStyles = (styles) => {
   showNotification('回复风格已保存', 'success')
 }
 
-const openConsole = (book) => {
-  selectedBook.value = book
-  showConsole.value = true
-}
-
 const startEditing = (book) => {
   editingBookId.value = book.id
   editTitle.value = book.title
@@ -701,8 +669,6 @@ const deleteBook = async () => {
   --library-panel: #ffffff;
   --library-accent: #2563eb;
   --library-accent-dark: #1d4ed8;
-  --library-mint: #0f766e;
-
   width: 100%;
   padding: 2.25rem 2rem 3rem;
   max-width: 1240px;
@@ -783,11 +749,6 @@ const deleteBook = async () => {
   border-color: #b8c6d1;
   color: var(--library-ink);
   transform: translateY(-1px);
-}
-
-.ai-author-btn:hover {
-  border-color: #5eead4;
-  color: var(--library-mint);
 }
 
 .primary-btn {

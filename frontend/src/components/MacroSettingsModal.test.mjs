@@ -6,7 +6,7 @@ import { dirname, resolve } from 'node:path'
 const currentDir = dirname(fileURLToPath(import.meta.url))
 const source = readFileSync(resolve(currentDir, 'MacroSettingsModal.vue'), 'utf8')
 
-assert.match(source, /Response Styles/, 'modal should present response style configuration')
+assert.match(source, /<h2>回复风格<\/h2>/, 'modal should present localized response style configuration')
 assert.match(source, /apiClient\.get\('\/settings\/conversation-styles'\)/, 'modal should load styles from the backend settings API')
 assert.match(source, /apiClient\.put\('\/settings\/conversation-styles'/, 'modal should save styles through the backend settings API')
 assert.match(source, /v-model="style\.id"/, 'modal should allow editing style ids')

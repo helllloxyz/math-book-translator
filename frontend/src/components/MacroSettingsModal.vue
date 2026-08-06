@@ -3,19 +3,19 @@
     <div class="modal-content card">
       <div class="modal-header">
         <div>
-          <p class="modal-kicker">Conversation</p>
-          <h2>Response Styles</h2>
+          <p class="modal-kicker">对话偏好</p>
+          <h2>回复风格</h2>
         </div>
-        <button class="close-btn" @click="$emit('close')" title="Close">×</button>
+        <button class="close-btn" @click="$emit('close')" title="关闭" aria-label="关闭">×</button>
       </div>
       
       <div class="modal-body">
         <p class="description">
-          Manage reusable response styles for reader conversations. The selected style is added only to the latest user message sent to the AI.
+          管理阅读对话中可复用的回复风格。选中的风格只会应用到本次发送给 AI 的最新消息。
         </p>
 
         <div v-if="error" class="error-message">{{ error }}</div>
-        <div v-if="loading" class="loading-message">Loading styles...</div>
+        <div v-if="loading" class="loading-message">正在加载回复风格…</div>
 
         <div v-else class="style-list">
           <div v-for="(style, index) in styles" :key="index" class="style-item">
@@ -27,18 +27,18 @@
               />
               <input 
                 v-model="style.label" 
-                placeholder="Label" 
+                placeholder="显示名称"
                 class="modal-input label-input"
               />
-              <button class="remove-btn" @click="removeStyle(index)" title="Remove style">×</button>
+              <button class="remove-btn" @click="removeStyle(index)" title="删除风格" :aria-label="`删除第 ${index + 1} 个回复风格`">×</button>
               <input
                 v-model="style.description"
-                placeholder="Description"
+                placeholder="风格说明"
                 class="modal-input description-input"
               />
               <textarea
                 v-model="style.prompt"
-                placeholder="Response style prompt..."
+                placeholder="回复风格提示词…"
                 class="modal-input prompt-input"
                 rows="3"
               ></textarea>
@@ -47,13 +47,13 @@
         </div>
 
         <button type="button" class="add-btn" @click="addStyle">
-          <span class="icon">+</span> Add Style
+          <span class="icon">+</span> 添加风格
         </button>
 
         <div class="form-actions">
-          <button type="button" class="cancel-btn" @click="$emit('close')">Cancel</button>
+          <button type="button" class="cancel-btn" @click="$emit('close')">取消</button>
           <button type="button" class="save-btn primary-btn" :disabled="saving" @click="saveStyles">
-            {{ saving ? 'Saving...' : 'Save Styles' }}
+            {{ saving ? '正在保存…' : '保存风格' }}
           </button>
         </div>
       </div>
@@ -94,7 +94,7 @@ const loadStyles = async () => {
     const response = await apiClient.get('/settings/conversation-styles')
     styles.value = normalizeStyles(response.data)
   } catch (err) {
-    error.value = err?.response?.data?.detail || err.message || 'Failed to load response styles'
+    error.value = err?.response?.data?.detail || err.message || '回复风格加载失败'
   } finally {
     loading.value = false
   }
@@ -131,7 +131,7 @@ const saveStyles = async () => {
     emit('save', styles.value)
     emit('close')
   } catch (err) {
-    error.value = err?.response?.data?.detail || err.message || 'Failed to save response styles'
+    error.value = err?.response?.data?.detail || err.message || '回复风格保存失败'
   } finally {
     saving.value = false
   }

@@ -68,11 +68,11 @@ Keep routers thin: request validation, dependency wiring, HTTP errors, and deleg
 - `frontend/src/main.js`: Vue app bootstrap, Pinia, router, global CSS.
 - `frontend/src/router/index.js`: routes for library, reader, notes, and standalone conversation page.
 - `frontend/src/api/client.js`: Axios client and API URL construction. Default backend is `http://localhost:8000`, override with `VITE_API_URL`.
-- `frontend/src/stores/bookStore.js`: Pinia store for books, imports/uploads, translation, chapter content, notes, reader tree, guides, and agent endpoints.
+- `frontend/src/stores/bookStore.js`: Pinia store for books, imports/uploads, translation, chapter content, notes, reader tree, and guides.
 
 ### Frontend Views
 
-- `frontend/src/views/Library.vue`: book list, import/upload, settings, macro settings, translation start, progress polling, rename/delete, and agent console entry.
+- `frontend/src/views/Library.vue`: book list, import/upload, preferences, translation progress, rename/delete, and package import/export.
 - `frontend/src/views/Reader.vue`: main reading workspace. It coordinates book/guide tree navigation, source/translation rendering, notes/cards, selection chat, quiz, and source highlighting.
 - `frontend/src/views/Notes.vue`: book note list and note chat interactions.
 - `frontend/src/views/ConversationPage.vue`: full-page conversation view backed by local conversation payload metadata.
@@ -81,7 +81,7 @@ Keep routers thin: request validation, dependency wiring, HTTP errors, and deleg
 
 - Reader shell: `Sidebar.vue`, `ReaderTreeNode.vue`, `ReaderPanes.vue`, `ReaderToolbar.vue`, `ContextMenu.vue`.
 - Notes/conversation: `NotesPanel.vue`, `NoteCard.vue`, `LearningSidebar.vue`, `ConversationCard.vue`, `ConversationDialog.vue`, `QuizCard.vue`.
-- Library/settings/agent: `ImportModal.vue`, `SettingsModal.vue`, `MacroSettingsModal.vue`, `AgentModal.vue`, `AgentConsole.vue`, `TrajectoryBrowser.vue`.
+- Library/settings: `ImportModal.vue`, `SettingsModal.vue`, `MacroSettingsModal.vue`.
 - `frontend/src/composables/useReaderContent.js`: fetch/render selected chapter or guide content, trigger KaTeX/Mermaid rendering, and manage rendered HTML.
 - `frontend/src/composables/useLearningCards.js`: local note/card creation and serialization.
 - `frontend/src/composables/useChat.js`: streaming chat wrappers.
@@ -127,7 +127,7 @@ Selection/chapter chat UI -> `useChat.js` streaming endpoints -> `TranslatorServ
 
 ### DeepTree Author
 
-Library/Agent Console -> legacy `/agent/*` routes -> agent services -> skills in `backend/app/skills/` -> manifests/content/history in the book storage directory.
+The frontend authoring console has been retired. Legacy `/agent/*` routes still delegate to agent services and skills in `backend/app/skills/`, with manifests/content/history stored in the book storage directory.
 
 ## Engineering Conventions
 

@@ -400,69 +400,6 @@ export const useBookStore = defineStore('book', {
         console.error(err)
         throw err
       }
-    },
-    // Agent Actions
-    async initAgentBook(domain) {
-      try {
-        const response = await apiClient.post('/agent/init', { domain });
-        await this.fetchBooks();
-        return response.data.id;
-      } catch (err) {
-        this.error = err.message;
-        throw err;
-      }
-    },
-    async buildAgentStructure(bookId) {
-      try {
-        await apiClient.post('/agent/build-structure', { book_id: bookId });
-      } catch (err) {
-        this.error = err.message;
-        throw err;
-      }
-    },
-    async fetchAgentManifest(bookId) {
-      try {
-        const response = await apiClient.get(`/agent/${bookId}/manifest`);
-        return response.data;
-      } catch (err) {
-        this.error = err.message;
-        throw err;
-      }
-    },
-    async fetchAgentHistory(bookId) {
-      try {
-        const response = await apiClient.get(`/agent/${bookId}/history`);
-        return response.data;
-      } catch (err) {
-        this.error = err.message;
-        throw err;
-      }
-    },
-    async confirmAgentStructure(bookId, manifest) {
-      try {
-        await apiClient.post('/agent/confirm-structure', { book_id: bookId, manifest });
-        await this.fetchBooks();
-      } catch (err) {
-        this.error = err.message;
-        throw err;
-      }
-    },
-    async regenerateAgentNode(bookId, nodeId, instruction) {
-      try {
-        await apiClient.post('/agent/regenerate-node', { book_id: bookId, node_id: nodeId, instruction });
-      } catch (err) {
-        this.error = err.message;
-        throw err;
-      }
-    },
-    async interactWithAgent(bookId, message) {
-      try {
-        const response = await apiClient.post(`/agent/${bookId}/interact`, { message });
-        return response.data;
-      } catch (err) {
-        this.error = err.message;
-        throw err;
-      }
     }
   }
 })

@@ -152,7 +152,7 @@
   - 这里 JSON 解析比 llm_json.extract_json_candidate() 弱，后续可统一。
 
   7. DeepTree Author Agent
-  入口：Agent Console 的 build / confirm / refine / regenerate。
+  入口：兼容 `/agent/*` API 的 build / confirm / refine / regenerate 操作（前端控制台已下线）。
 
   关键位置：
 

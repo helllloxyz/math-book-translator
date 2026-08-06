@@ -2,6 +2,8 @@
 
 DeepTree Author 是一个基于递归认知代理（Recursive Cognitive Agent）的数学书籍创作系统，采用“自顶向下”的生成策略。
 
+> 当前前端已下线 AI Author 入口与控制台；以下内容仅记录仍保留的兼容后端工作流。
+
 ## 1. 核心架构组件
 
 ### 1.1 后端服务 (Backend Services)
@@ -24,7 +26,7 @@ DeepTree Author 是一个基于递归认知代理（Recursive Cognitive Agent）
 ## 2. 核心工作流 (Workflow)
 
 ### 2.1 初始化 (Initialization)
-1.  用户通过 `AgentModal.vue` 提供数学领域（如“群论”）。
+1.  兼容 API 调用方提供数学领域（如“群论”）。
 2.  调用 `/agent/init`，在 `storage/` 下创建 UUID 文件夹及初始 `00_meta.json`。
 
 ### 2.2 架构构建 (Architecting)
@@ -33,7 +35,7 @@ DeepTree Author 是一个基于递归认知代理（Recursive Cognitive Agent）
 3.  系统解析 JSON 并同步至 `00_meta.json`，状态变更为 `reviewing`。
 
 ### 2.3 交互精炼 (Interactive Refinement)
-1.  用户在 `AgentConsole.vue` 输入修改指令（如“在第二章增加对共轭类的讨论”）。
+1.  兼容 API 调用方提交修改指令（如“在第二章增加对共轭类的讨论”）。
 2.  `AgentService` 将“当前目录 + 愿景 + 用户指令”发送给 LLM (Refiner Skill)。
 3.  LLM 返回更新后的目录树，系统实时更新预览。
 
@@ -48,8 +50,7 @@ DeepTree Author 是一个基于递归认知代理（Recursive Cognitive Agent）
 
 ```mermaid
 graph TD
-    User([用户]) -->|输入指令| Frontend[AgentConsole.vue]
-    Frontend -->|POST /interact| API[FastAPI Endpoints]
+    Client([兼容 API 调用方]) -->|POST /interact| API[FastAPI Endpoints]
     API --> AgentSvc[AgentService]
     
     subgraph "核心循环"
