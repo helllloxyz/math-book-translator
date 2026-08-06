@@ -139,6 +139,10 @@ import {
   getChapterReadingStatus,
   setChapterReadingStatus
 } from '../utils/chapterReadingStatus'
+import {
+  getFurthestReadChapter,
+  rememberFurthestReadChapter
+} from '../utils/readerProgress'
 import { findAdjacentReaderLeaves, findChapterGuideLeaf } from '../utils/readerTree'
 import { buildReaderItemQuery, findReaderLeafByRouteQuery } from '../utils/readerRoute'
 import { renderMarkdown, renderMath } from '../utils/renderer'
@@ -403,7 +407,11 @@ const replaceReaderRouteQuery = async (item, extraQuery = {}) => {
 
 const loadItemFromRouteQuery = async () => {
   if (!book.value || !bookTree.value.length) return
-  const routeItem = findReaderLeafByRouteQuery(bookTree.value, guideTree.value, route.query)
+  const hasExplicitReaderTarget = Boolean(route.query.chapter_id || route.query.guide_id)
+  const routeItem = hasExplicitReaderTarget
+    ? findReaderLeafByRouteQuery(bookTree.value, guideTree.value, route.query)
+    : getFurthestReadChapter(book.value.id, bookTree.value)
+      || findReaderLeafByRouteQuery(bookTree.value, guideTree.value, route.query)
   if (!routeItem || currentItem.value?.id === routeItem.id) return
   await handleItemSelect(routeItem, { updateRoute: false })
 }
@@ -417,6 +425,7 @@ const handleItemSelect = async (item, options = {}) => {
     resetGuidePane()
   }
   syncChapterReadingStatus(item)
+  rememberFurthestReadChapter(book.value?.id, bookTree.value, item)
   await loadItem(item)
   await resetToolCards(item)
   if (options.updateRoute !== false) {

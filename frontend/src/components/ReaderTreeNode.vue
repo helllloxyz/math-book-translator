@@ -4,6 +4,7 @@
       v-if="isDirectory"
       class="directory-row"
       type="button"
+      :aria-expanded="expanded"
       :style="{ paddingLeft: `${depth * 0.85 + 0.35}rem` }"
       @click="expanded = !expanded"
     >
@@ -13,9 +14,11 @@
 
     <button
       v-else
+      ref="rowRef"
       class="leaf-row"
-      :class="{ active: currentItemId === node.id }"
+      :class="{ active: isCurrentItem }"
       type="button"
+      :aria-current="isCurrentItem ? 'page' : undefined"
       :style="{ paddingLeft: `${depth * 0.85 + 0.35}rem` }"
       @click="$emit('select-leaf', node)"
     >
@@ -59,7 +62,24 @@ defineEmits(['select-leaf'])
 
 const expanded = ref(false)
 const titleRef = ref(null)
+const rowRef = ref(null)
 const isDirectory = computed(() => props.node?.kind !== 'leaf')
+const isCurrentItem = computed(() => (
+  props.currentItemId !== null &&
+  props.currentItemId !== undefined &&
+  String(props.currentItemId) === String(props.node?.id)
+))
+const containsCurrentItem = computed(() => {
+  if (!isDirectory.value || props.currentItemId === null || props.currentItemId === undefined) return false
+
+  const targetId = String(props.currentItemId)
+  const containsTarget = (node) => {
+    if (String(node?.id) === targetId) return true
+    return (node?.children || []).some(containsTarget)
+  }
+
+  return (props.node?.children || []).some(containsTarget)
+})
 const labelText = computed(() => String(props.node?.label || '').replace(/\s+/g, ' ').trim())
 const titleText = computed(() => String(props.node?.title || '').replace(/\s+/g, ' ').trim())
 const visibleLabel = computed(() => {
@@ -96,6 +116,14 @@ const renderTitleMath = async () => {
 }
 
 watch(renderedDisplayTitle, renderTitleMath, { immediate: true, flush: 'post' })
+watch(containsCurrentItem, (containsCurrent) => {
+  if (containsCurrent) expanded.value = true
+}, { immediate: true })
+watch(isCurrentItem, async (isCurrent) => {
+  if (!isCurrent) return
+  await nextTick()
+  rowRef.value?.scrollIntoView?.({ block: 'nearest' })
+}, { immediate: true, flush: 'post' })
 </script>
 
 <style scoped>

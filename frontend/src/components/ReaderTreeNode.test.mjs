@@ -13,6 +13,9 @@ assert.match(component, /titleText/, 'tree nodes should compare labels against p
 assert.match(component, /renderedDisplayTitle/, 'tree nodes should render the numeric label and title as one title run')
 assert.doesNotMatch(component, /class="item-label"/, 'tree rows should not style numeric labels separately from titles')
 assert.match(component, /const expanded = ref\(false\)/, 'directory rows should start collapsed after import/load')
+assert.match(component, /containsCurrentItem/, 'tree nodes should detect whether they contain the active chapter')
+assert.match(component, /if \(containsCurrent\) expanded\.value = true/, 'the active chapter directory path should expand automatically')
+assert.match(component, /scrollIntoView/, 'the restored chapter should be brought into the visible table of contents')
 assert.doesNotMatch(component, /\.directory-row\s*\{[^}]*font-weight:\s*700/, 'directory rows should not be bold by default')
 assert.match(component, /\.disclosure\s*\{[^}]*font-size:\s*1\.1rem/, 'directory disclosure marker should be visually larger')
 
