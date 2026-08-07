@@ -361,6 +361,22 @@ export const useBookStore = defineStore('book', {
         throw err
       }
     },
+    async fetchQuizCandidates(chapterId, options = {}) {
+      try {
+        const response = await apiClient.post(`/chapters/${chapterId}/quiz/candidates`, {
+          quiz_mode: options.quizMode || options.quiz_mode || 'chapter',
+          question_type: options.questionType || options.question_type || null,
+          personalization_context: options.personalizationContext || options.personalization_context || null,
+          count: options.count || 3,
+          previous_questions: options.previousQuestions || options.previous_questions || []
+        })
+        return Array.isArray(response.data?.questions) ? response.data.questions : []
+      } catch (err) {
+        const message = err.response?.data?.detail || err.message
+        this.error = message
+        throw new Error(message)
+      }
+    },
     async submitQuizAttempt(questionId, answerText, conversationHistory = []) {
       try {
         const response = await apiClient.post(`/quiz/questions/${questionId}/attempts`, {

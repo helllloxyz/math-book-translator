@@ -182,6 +182,100 @@ async def test_question_generation_uses_feynman_and_type_specific_prompts(monkey
 
 
 @pytest.mark.asyncio
+async def test_candidate_generation_uses_one_call_and_includes_previous_questions(monkeypatch):
+    calls = []
+    added = []
+
+    class FakeTranslator:
+        api_key = "configured"
+
+        def __init__(self, **_kwargs):
+            pass
+
+        async def complete(self, user_prompt, system_prompt, temperature):
+            calls.append((user_prompt, system_prompt, temperature))
+            return json.dumps(
+                {
+                    "questions": [
+                        {
+                            "question_type": question_type,
+                            "question_text": f"候选题 {index + 1}",
+                            "expected_points": [f"要点 {index + 1}"],
+                        }
+                        for index, question_type in enumerate(
+                            ["concept_explain", "theorem_understanding", "proof_strategy"]
+                        )
+                    ]
+                },
+                ensure_ascii=False,
+            )
+
+    class FakeDb:
+        async def execute(self, _query):
+            class Scalars:
+                @staticmethod
+                def all():
+                    return ["题库中的旧题"]
+
+            return SimpleNamespace(scalars=lambda: Scalars())
+
+        def add(self, value):
+            added.append(value)
+
+        async def commit(self):
+            pass
+
+        async def refresh(self, value):
+            value.id = len([item for item in added if item.id is not None]) + 1
+
+    chapter = SimpleNamespace(
+        id=2,
+        book_id=1,
+        chapter_index="1",
+        title_en="Vector Spaces",
+        title_zh=None,
+    )
+    book = SimpleNamespace(id=1, uuid="book-uuid", title="Linear Algebra")
+
+    async def context(*_args, **_kwargs):
+        return "SOURCE BODY"
+
+    async def chapter_or_none(*_args):
+        return chapter
+
+    async def book_or_none(*_args):
+        return book
+
+    monkeypatch.setattr("app.services.quiz_service.TranslatorService", FakeTranslator)
+    monkeypatch.setattr(QuizService, "_chapter_or_none", chapter_or_none)
+    monkeypatch.setattr(QuizService, "_book_or_none", book_or_none)
+    monkeypatch.setattr(QuizService, "build_generation_context", context)
+    monkeypatch.setattr(QuizService, "weighted_random_question_type", lambda: "concept_explain")
+
+    questions = await QuizService.generate_question_candidates(
+        2,
+        count=3,
+        quiz_mode="chapter",
+        question_type=None,
+        personalization_context=None,
+        previous_questions=["已经问过的老题"],
+        db=FakeDb(),
+    )
+
+    assert len(calls) == 1
+    assert len(questions) == 3
+    assert len(added) == 3
+    assert "已经问过的老题" in calls[0][0]
+    assert "题库中的旧题" in calls[0][0]
+    assert "Do not repeat or lightly paraphrase" in calls[0][1]
+    assert {question.question_type for question in questions} == {
+        "concept_explain",
+        "theorem_understanding",
+        "proof_strategy",
+    }
+
+
+@pytest.mark.asyncio
 async def test_attempt_evaluation_uses_conversation_history_and_semantic_type_focus(monkeypatch):
     calls = []
     question = QuizQuestion(

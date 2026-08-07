@@ -57,12 +57,12 @@
                 type="button"
                 class="regenerate-quiz-button"
                 :disabled="card.loading"
-                title="重新出题"
-                aria-label="重新出题"
+                title="出新题"
+                aria-label="出新题"
                 @click="emit('regenerate')"
               >
                 <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.34 5.66" /><path d="M20 4v7h-7" /></svg>
-                <span>重新出题</span>
+                <span>出新题</span>
               </button>
               <button
                 v-if="canGoSource"
@@ -113,7 +113,7 @@
         </header>
 
         <div class="dialog-content">
-          <section ref="messagesRef" class="message-list latex-content" :class="{ empty: !messages.length && !selectedText }">
+          <section ref="messagesRef" class="message-list latex-content" :class="{ empty: !messages.length && !selectedText && !quizCandidates.length }">
             <details
               v-if="isSelectionNote && selectedText"
               class="question-block latex-content question-context-details"
@@ -124,6 +124,40 @@
             </details>
             <p v-if="showEmptyMessage" class="empty-message">{{ emptyMessage }}</p>
             <template v-else>
+              <details
+                v-if="isQuiz && quizCandidates.length"
+                class="quiz-candidate-pool"
+                :open="!card.questionId"
+              >
+                <summary>
+                  <span>本轮题库</span>
+                  <strong>{{ quizCandidates.length }} 道候选题</strong>
+                  <em>{{ card.questionId ? '已选择，点击可展开' : '请选一题作答' }}</em>
+                </summary>
+                <div class="quiz-candidate-list">
+                  <button
+                    v-for="(question, candidateIndex) in quizCandidates"
+                    :key="question.id"
+                    type="button"
+                    class="quiz-candidate"
+                    :class="{ selected: question.id === card.questionId }"
+                    :disabled="card.loading || quizSelectionLocked"
+                    :aria-pressed="question.id === card.questionId"
+                    @click="emit('select-question', question)"
+                  >
+                    <span class="candidate-number">{{ String(candidateIndex + 1).padStart(2, '0') }}</span>
+                    <div class="candidate-copy">
+                      <small>{{ question.question_type_label || question.question_type }}</small>
+                      <div
+                        class="candidate-text"
+                        :class="{ typing: isCandidateTyping(question) }"
+                        v-html="renderMessage(question.display_text || question.question_text)"
+                      ></div>
+                    </div>
+                    <span class="candidate-action">{{ question.id === card.questionId ? '已选' : '回答这题' }}</span>
+                  </button>
+                </div>
+              </details>
               <article
                 v-for="(message, index) in displayMessages"
                 :key="`${message.role}-${index}`"
@@ -247,7 +281,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['close', 'send', 'regenerate', 'go-source', 'delete'])
+const emit = defineEmits(['close', 'send', 'regenerate', 'select-question', 'go-source', 'delete'])
 
 const draft = ref('')
 const dialogRef = ref(null)
@@ -268,6 +302,14 @@ const messages = computed(() => {
   if (Array.isArray(props.card.messages)) return props.card.messages
   return deserializeMessages(props.card.noteContent || props.card.note_content || '')
 })
+
+const quizCandidates = computed(() => (
+  Array.isArray(props.card?.quizCandidates) ? props.card.quizCandidates : []
+))
+
+const quizSelectionLocked = computed(() => (
+  messages.value.some(message => message?.role === 'user')
+))
 
 const dialogTitle = computed(() => {
   if (!isQuiz.value) return 'Note'
@@ -317,6 +359,7 @@ const selectedResponseStyle = computed(() => (
 
 const isWaitingForFirstToken = computed(() => {
   if (!props.card?.loading) return false
+  if (isQuiz.value && quizCandidates.value.some(question => String(question?.display_text || '').trim())) return false
   const lastAssistant = [...messages.value].reverse().find((message) => message.role === 'assistant')
   return !String(lastAssistant?.content || '').trim()
 })
@@ -330,6 +373,11 @@ const isTypingMessage = (index, message) => (
   && message?.role === 'assistant'
   && index === displayMessages.value.length - 1
   && Boolean(String(message?.content || '').trim())
+)
+
+const isCandidateTyping = (question) => (
+  Boolean(props.card?.quizGenerating)
+  && String(question?.display_text || '') !== String(question?.question_text || '')
 )
 
 const metadataFields = computed(() => {
@@ -346,8 +394,9 @@ const metadataFields = computed(() => {
 })
 
 const placeholder = computed(() => {
-  if (isQuiz.value && props.card?.quizGenerationError) return '重新出题后即可作答'
+  if (isQuiz.value && props.card?.quizGenerationError) return '出新题后即可作答'
   if (isQuiz.value && props.card?.quizGenerating) return '题目生成中…'
+  if (isQuiz.value && !props.card?.questionId) return '请先从上方选择一道题…'
   if (isQuiz.value) return '用自己的话讲讲，不必输入公式…'
   if (isChapterNote.value) return 'Ask about this chapter...'
   return 'Ask about this note...'
@@ -882,6 +931,149 @@ onUnmounted(() => {
   margin: 0;
 }
 
+.quiz-candidate-pool {
+  margin: 0 0 1.6rem;
+  border: 0.5px solid rgba(8, 80, 65, 0.2);
+  border-radius: 14px;
+  background: rgba(250, 252, 248, 0.72);
+  overflow: hidden;
+}
+
+.quiz-candidate-pool > summary {
+  min-height: 52px;
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: baseline;
+  gap: 8px;
+  padding: 13px 15px;
+  color: #28594d;
+  cursor: pointer;
+  list-style: none;
+}
+
+.quiz-candidate-pool > summary::-webkit-details-marker {
+  display: none;
+}
+
+.quiz-candidate-pool > summary span {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.quiz-candidate-pool > summary strong {
+  color: #173f36;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.quiz-candidate-pool > summary em {
+  justify-self: end;
+  color: #71847e;
+  font-size: 11px;
+  font-style: normal;
+}
+
+.quiz-candidate-list {
+  display: grid;
+  gap: 0;
+  padding: 0 8px 8px;
+}
+
+.quiz-candidate {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 11px;
+  padding: 14px 10px;
+  border: 0;
+  border-top: 0.5px solid rgba(8, 80, 65, 0.12);
+  background: transparent;
+  color: #29231d;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: background-color 160ms ease, box-shadow 160ms ease;
+}
+
+.quiz-candidate:first-child {
+  border-top-color: transparent;
+}
+
+.quiz-candidate:hover:not(:disabled),
+.quiz-candidate.selected {
+  border-radius: 10px;
+  background: #edf7f2;
+  box-shadow: inset 2px 0 #1d9e75;
+}
+
+.quiz-candidate:disabled {
+  cursor: default;
+}
+
+.candidate-number {
+  padding-top: 3px;
+  color: #7e928b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.candidate-copy {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.candidate-copy small {
+  color: #397365;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+}
+
+.candidate-text {
+  color: #29231d;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.candidate-text :deep(p) {
+  margin: 0;
+}
+
+.candidate-text.typing::after {
+  content: '';
+  display: inline-block;
+  width: 0.38em;
+  height: 1em;
+  margin-left: 0.16em;
+  border-radius: 2px;
+  background: #1d9e75;
+  vertical-align: -0.12em;
+  animation: quiz-caret 0.78s steps(1, end) infinite;
+}
+
+.candidate-action {
+  align-self: center;
+  min-width: 4.8rem;
+  padding: 5px 9px;
+  border: 0.5px solid rgba(8, 80, 65, 0.2);
+  border-radius: 999px;
+  color: #28594d;
+  font-size: 11px;
+  font-weight: 650;
+  text-align: center;
+}
+
+.quiz-candidate.selected .candidate-action {
+  border-color: #1d9e75;
+  background: #1d9e75;
+  color: #ffffff;
+}
+
 .source-button {
   width: 32px;
   height: 32px;
@@ -1405,6 +1597,23 @@ onUnmounted(() => {
   .standalone-actions .delete-conversation-button {
     min-height: 28px;
     padding: 0.38rem 0.65rem;
+  }
+
+  .quiz-candidate-pool > summary {
+    grid-template-columns: auto 1fr;
+  }
+
+  .quiz-candidate-pool > summary em {
+    display: none;
+  }
+
+  .quiz-candidate {
+    grid-template-columns: 26px minmax(0, 1fr);
+  }
+
+  .candidate-action {
+    grid-column: 2;
+    justify-self: start;
   }
 
   .conversation-dialog.standalone .message-list {

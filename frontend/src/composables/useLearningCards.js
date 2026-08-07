@@ -241,7 +241,9 @@ export function useLearningCards() {
         card.quizMode = options.quizMode || 'chapter'
         card.questionType = options.questionType || ''
         card.personalizationContext = options.personalizationContext || ''
-        card.questionSummary = '正在准备一道新题…'
+        card.questionSummary = '正在准备一组新题…'
+        card.quizCandidates = []
+        card.quizQuestionHistory = []
         card.messages = [{ role: 'assistant', content: '' }]
         card.loading = true
         card.quizGenerating = true

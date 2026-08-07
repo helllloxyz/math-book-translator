@@ -8,6 +8,7 @@
       :metadata-info="metadata"
       @send="handleSend"
       @regenerate="handleRegenerateQuiz"
+      @select-question="handleSelectQuizQuestion"
       @go-source="handleGoSource"
       @delete="handleDelete"
     />
@@ -37,7 +38,6 @@
 import { onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import ConversationDialog from '../components/ConversationDialog.vue'
-import { apiClient } from '../api/client'
 import { useChat } from '../composables/useChat'
 import { useBookStore } from '../stores/bookStore'
 import { useLearningCards } from '../composables/useLearningCards'
@@ -98,63 +98,69 @@ const quizErrorMessage = (error) => {
   return error?.response?.data?.detail || error?.message || '请稍后重试。'
 }
 
+const uniqueQuestionTexts = (values = []) => {
+  return [...new Set(values.map(value => String(value || '').replace(/\s+/g, ' ').trim()).filter(Boolean))]
+}
+
+const collectQuizQuestionHistory = () => uniqueQuestionTexts([
+  ...(Array.isArray(card.value?.quizQuestionHistory) ? card.value.quizQuestionHistory : []),
+  ...(Array.isArray(card.value?.quizCandidates)
+    ? card.value.quizCandidates.map(question => question?.question_text)
+    : []),
+  card.value?.questionText
+]).slice(-30)
+
 const generateQuizQuestion = async () => {
   if (!card.value || !quizRequest.value?.chapterId || card.value.loading) return
 
   const request = quizRequest.value
+  const previousQuestions = collectQuizQuestionHistory()
+  const hadAnswer = Array.isArray(card.value.messages)
+    && card.value.messages.some(message => message?.role === 'user')
+  if (hadAnswer && card.value.noteId) {
+    card.value.id = `quiz_pool:${Date.now()}`
+    card.value.noteId = null
+  }
   card.value.loading = true
   card.value.quizGenerating = true
   card.value.quizGenerationError = ''
   card.value.questionId = null
   card.value.questionText = ''
-  card.value.questionSummary = '正在准备一道新题…'
-  card.value.messages = [{ role: 'assistant', content: '' }]
+  card.value.questionSummary = '正在准备一组新题…'
+  card.value.quizCandidates = []
+  card.value.quizQuestionHistory = previousQuestions
+  card.value.messages = []
   card.value.noteContent = ''
   persist()
   updateTitle()
 
   try {
-    const question = await bookStore.fetchNextQuizQuestion(request.chapterId, {
+    const questions = await bookStore.fetchQuizCandidates(request.chapterId, {
       quizMode: request.quizMode || 'chapter',
       questionType: request.questionType || null,
-      personalizationContext: request.personalizationContext || ''
+      personalizationContext: request.personalizationContext || '',
+      count: 3,
+      previousQuestions
     })
-    const typeLabel = question?.question_type_label || question?.question_type || 'Quiz'
-    let visibleQuestion = ''
-
-    hydrateQuizQuestionCard(card.value, question, request.personalizationContext || '', {
-      questionContent: '',
-      questionSummary: `${typeLabel} · 正在呈现题目…`
-    })
-    card.value.loading = true
-    card.value.quizGenerating = true
+    if (!questions.length) throw new Error('没有生成可用的候选题。')
+    card.value.quizCandidates = questions.map(question => ({ ...question, display_text: '' }))
+    card.value.questionSummary = `本轮题库 · ${questions.length} 道候选题`
     persist()
 
-    await appendWithTypewriter(question?.question_text || '请回答这道 Quiz。', (chunk) => {
-      visibleQuestion += chunk
-      hydrateQuizQuestionCard(card.value, question, request.personalizationContext || '', {
-        questionContent: visibleQuestion,
-        questionSummary: `${typeLabel} · 正在呈现题目…`
-      })
-      card.value.loading = true
-      card.value.quizGenerating = true
-      persist()
-    }, { chunkSize: 3, intervalMs: 18 })
+    await Promise.all(card.value.quizCandidates.map(async (question, index) => {
+      if (index > 0) {
+        await new Promise(resolve => window.setTimeout(resolve, index * 90))
+      }
+      await appendWithTypewriter(question.question_text, (chunk) => {
+        question.display_text += chunk
+        persist()
+      }, { chunkSize: 8, intervalMs: 12 })
+    }))
 
-    hydrateQuizQuestionCard(card.value, question, request.personalizationContext || '')
     card.value.loading = false
     card.value.quizGenerating = false
     persist()
     updateTitle()
-
-    if (card.value.noteId) {
-      apiClient.put(`/notes/${card.value.noteId}`, {
-        note_content: card.value.noteContent,
-        title: card.value.questionSummary
-      }).catch((error) => {
-        console.error('Failed to persist regenerated Quiz question:', error)
-      })
-    }
   } catch (error) {
     card.value.loading = false
     card.value.quizGenerating = false
@@ -167,6 +173,17 @@ const generateQuizQuestion = async () => {
 
 const handleRegenerateQuiz = () => {
   generateQuizQuestion()
+}
+
+const handleSelectQuizQuestion = (question) => {
+  if (!card.value || card.value.loading || !question?.id) return
+  const hasAnswer = Array.isArray(card.value.messages)
+    && card.value.messages.some(message => message?.role === 'user')
+  if (hasAnswer) return
+  hydrateQuizQuestionCard(card.value, question, quizRequest.value?.personalizationContext || '')
+  card.value.quizGenerationError = ''
+  persist()
+  updateTitle()
 }
 
 const handleGoSource = () => {
@@ -213,7 +230,12 @@ onMounted(() => {
   mode.value = payload.mode || 'note'
   quizRequest.value = payload.quizRequest || null
   updateTitle()
-  if (mode.value === 'quiz' && quizRequest.value && (!card.value.questionId || card.value.quizGenerating)) {
+  const hasQuizCandidates = Array.isArray(card.value.quizCandidates) && card.value.quizCandidates.length > 0
+  if (
+    mode.value === 'quiz'
+    && quizRequest.value
+    && (card.value.quizGenerating || (!card.value.questionId && !hasQuizCandidates))
+  ) {
     card.value.loading = false
     generateQuizQuestion()
   }

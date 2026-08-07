@@ -50,6 +50,25 @@ async def next_chapter_quiz(chapter_id: int, request: QuizNextRequest, db: Async
     return QuizService.question_to_dict(question)
 
 
+@router.post("/chapters/{chapter_id}/quiz/candidates")
+async def quiz_candidates(chapter_id: int, request: QuizNextRequest, db: AsyncSession = Depends(get_db)):
+    try:
+        questions = await QuizService.generate_question_candidates(
+            chapter_id,
+            count=request.count,
+            quiz_mode=request.quiz_mode,
+            question_type=request.question_type,
+            personalization_context=request.personalization_context,
+            previous_questions=request.previous_questions,
+            db=db,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if questions is None:
+        raise HTTPException(status_code=404, detail="Chapter not found")
+    return {"questions": [QuizService.question_to_dict(question) for question in questions]}
+
+
 @router.post("/quiz/questions/{question_id}/attempts")
 async def create_quiz_attempt(question_id: int, request: QuizAttemptRequest, db: AsyncSession = Depends(get_db)):
     if not request.answer_text.strip():

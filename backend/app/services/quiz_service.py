@@ -64,6 +64,27 @@ class QuizService:
         return result.scalar_one_or_none()
 
     @staticmethod
+    async def recent_question_texts(
+        *,
+        book_id: int,
+        chapter_id: int,
+        quiz_mode: str,
+        db: AsyncSession,
+        limit: int = 30,
+    ) -> list[str]:
+        result = await db.execute(
+            select(QuizQuestion.question_text)
+            .where(
+                QuizQuestion.book_id == book_id,
+                QuizQuestion.chapter_id == chapter_id,
+                QuizQuestion.quiz_mode == normalize_quiz_mode(quiz_mode),
+            )
+            .order_by(QuizQuestion.created_at.desc())
+            .limit(max(1, min(100, limit)))
+        )
+        return [str(text).strip() for text in result.scalars().all() if str(text or "").strip()]
+
+    @staticmethod
     def weighted_random_question_type() -> str:
         weights = question_type_weights()
         total = sum(max(0.0, weight) for weight in weights.values())
@@ -353,6 +374,151 @@ class QuizService:
         await db.commit()
         await db.refresh(question)
         return question
+
+    @staticmethod
+    async def generate_question_candidates(
+        chapter_id: int,
+        *,
+        count: int,
+        quiz_mode: str,
+        question_type: str | None,
+        personalization_context: str | None,
+        previous_questions: list[str] | None,
+        db: AsyncSession,
+    ) -> list[QuizQuestion] | None:
+        """Generate a small, distinct candidate pool in one LLM call."""
+        mode = normalize_quiz_mode(quiz_mode)
+        candidate_count = max(1, min(QuizService.CHAPTER_BANK_BATCH_SIZE, int(count or 1)))
+        chapter = await QuizService._chapter_or_none(chapter_id, db)
+        if not chapter:
+            return None
+        book = await QuizService._book_or_none(chapter.book_id, db)
+        if not book:
+            return None
+        if question_type and not is_valid_question_type(question_type):
+            raise ValueError(f"Unsupported quiz question type: {question_type}")
+
+        if question_type:
+            selected_types = [canonical_question_type(question_type)] * candidate_count
+        else:
+            selected_types = QuizService.sparse_bank_question_types(
+                QuizService.weighted_random_question_type()
+            )[:candidate_count]
+
+        context = await QuizService.build_generation_context(
+            book,
+            chapter,
+            selected_types[0],
+            mode,
+        )
+        if personalization_context:
+            context = f"{context}\n\nPersonalization context:\n{personalization_context}"
+
+        stored_questions = await QuizService.recent_question_texts(
+            book_id=book.id,
+            chapter_id=chapter.id,
+            quiz_mode=mode,
+            db=db,
+        )
+        old_questions = []
+        for value in [*(previous_questions or []), *stored_questions]:
+            normalized_text = " ".join(str(value or "").split()).strip()
+            if normalized_text and normalized_text not in old_questions:
+                old_questions.append(normalized_text[:800])
+            if len(old_questions) >= 30:
+                break
+
+        type_specs = []
+        for candidate_type in selected_types:
+            skill = get_quiz_skill(candidate_type)
+            type_specs.append(
+                {
+                    "question_type": skill.question_type,
+                    "label": skill.label,
+                    "generation_instruction": skill.generation_prompt,
+                    "evaluation_focus": skill.evaluation_prompt,
+                    "default_expected_points": skill.expected_points,
+                    "default_rubric": skill.evaluation_rubric,
+                    "followup_rule": skill.next_step_rule,
+                }
+            )
+
+        translator = TranslatorService(task="quiz")
+        parsed_questions: list[dict[str, Any]] = []
+        if getattr(translator, "api_key", None):
+            system_prompt = (
+                "You design a small set of distinct Feynman-style teach-back questions for a reader of a serious "
+                "mathematics book. Every question must be answerable in ordinary natural language, typically in 2-6 "
+                "sentences. Never require typing a formula, carrying out a calculation, filling a missing equation, "
+                "reproducing notation, or writing a complete formal proof. Use only claims supported by the supplied "
+                "source. Write in Chinese and do not include answers or expose learning-profile evidence. The questions "
+                "must test meaningfully different concepts, results, proof turns, or connections. Do not repeat or lightly "
+                "paraphrase any previous question. Return strictly valid JSON as {\"questions\": [...]}. Each item must "
+                "contain question_type, question_text, difficulty, target_concepts, expected_points, common_mistakes, "
+                "context_refs, evaluation_rubric, and followup_strategy."
+            )
+            user_prompt = (
+                f"{context}\n\n"
+                f"Generate exactly {candidate_count} candidate questions.\n"
+                f"Candidate specifications, in order:\n{json.dumps(type_specs, ensure_ascii=False)}\n\n"
+                f"Previous questions that must not be repeated or lightly paraphrased:\n"
+                f"{json.dumps(old_questions, ensure_ascii=False)}"
+            )
+            try:
+                raw = await translator.complete(user_prompt, system_prompt, temperature=0.55)
+                parsed = extract_json_candidate(
+                    raw,
+                    validator=lambda value: (
+                        isinstance(value, dict) and isinstance(value.get("questions"), list)
+                    ),
+                )
+                parsed_questions = [item for item in parsed["questions"] if isinstance(item, dict)]
+            except Exception as exc:
+                logger.warning("Quiz candidate generation failed: %s", exc)
+
+        normalized_questions: list[dict[str, Any]] = []
+        seen_texts = {text.casefold() for text in old_questions}
+        chapter_title = chapter.title_zh or chapter.title_en or chapter.chapter_index
+        for index, candidate_type in enumerate(selected_types):
+            raw_data = parsed_questions[index] if index < len(parsed_questions) else {}
+            normalized = QuizService.normalize_question_data(
+                raw_data,
+                book_id=book.id,
+                chapter_id=chapter.id,
+                question_type=candidate_type,
+                quiz_mode=mode,
+                source="book_candidate_batch" if mode == BOOK_QUIZ_MODE else "chapter_candidate_batch",
+            ) if raw_data else QuizService._fallback_question_data(
+                book_id=book.id,
+                chapter_id=chapter.id,
+                chapter_title=chapter_title,
+                question_type=candidate_type,
+                quiz_mode=mode,
+                source="book_candidate_fallback" if mode == BOOK_QUIZ_MODE else "chapter_candidate_fallback",
+                personalization_context=personalization_context,
+            )
+            normalized_key = " ".join(normalized["question_text"].split()).casefold()
+            if normalized_key in seen_texts and raw_data:
+                normalized = QuizService._fallback_question_data(
+                    book_id=book.id,
+                    chapter_id=chapter.id,
+                    chapter_title=chapter_title,
+                    question_type=candidate_type,
+                    quiz_mode=mode,
+                    source="book_candidate_fallback" if mode == BOOK_QUIZ_MODE else "chapter_candidate_fallback",
+                    personalization_context=personalization_context,
+                )
+                normalized_key = " ".join(normalized["question_text"].split()).casefold()
+            seen_texts.add(normalized_key)
+            normalized_questions.append(normalized)
+
+        questions = [QuizQuestion(**data, times_seen=1, last_seen_at=datetime.utcnow()) for data in normalized_questions]
+        for question in questions:
+            db.add(question)
+        await db.commit()
+        for question in questions:
+            await db.refresh(question)
+        return questions
 
     @staticmethod
     async def choose_from_bank(
