@@ -7,6 +7,7 @@
       :card="card"
       :metadata-info="metadata"
       @send="handleSend"
+      @regenerate="handleRegenerateQuiz"
       @go-source="handleGoSource"
       @delete="handleDelete"
     />
@@ -36,8 +37,11 @@
 import { onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import ConversationDialog from '../components/ConversationDialog.vue'
+import { apiClient } from '../api/client'
 import { useChat } from '../composables/useChat'
 import { useBookStore } from '../stores/bookStore'
+import { useLearningCards } from '../composables/useLearningCards'
+import { appendWithTypewriter } from '../utils/typewriterStream'
 import {
   buildConversationDocumentTitle,
   conversationStorageKey,
@@ -48,12 +52,14 @@ import {
 const route = useRoute()
 const { streamCardChat } = useChat()
 const bookStore = useBookStore()
+const { hydrateQuizQuestionCard } = useLearningCards()
 
 const conversationId = String(route.params.conversationId || '')
 const card = ref(null)
 const contextText = ref('')
 const metadata = ref({})
 const mode = ref('note')
+const quizRequest = ref(null)
 const pendingDeleteTarget = ref(null)
 const deleting = ref(false)
 const deleteError = ref('')
@@ -64,7 +70,8 @@ const persist = (updatedCard = card.value) => {
     mode: mode.value,
     card: updatedCard,
     contextText: contextText.value,
-    metadata: metadata.value
+    metadata: metadata.value,
+    quizRequest: quizRequest.value
   })
 }
 
@@ -85,6 +92,81 @@ const handleSend = async (payload) => {
   })
   persist()
   updateTitle()
+}
+
+const quizErrorMessage = (error) => {
+  return error?.response?.data?.detail || error?.message || '请稍后重试。'
+}
+
+const generateQuizQuestion = async () => {
+  if (!card.value || !quizRequest.value?.chapterId || card.value.loading) return
+
+  const request = quizRequest.value
+  card.value.loading = true
+  card.value.quizGenerating = true
+  card.value.quizGenerationError = ''
+  card.value.questionId = null
+  card.value.questionText = ''
+  card.value.questionSummary = '正在准备一道新题…'
+  card.value.messages = [{ role: 'assistant', content: '' }]
+  card.value.noteContent = ''
+  persist()
+  updateTitle()
+
+  try {
+    const question = await bookStore.fetchNextQuizQuestion(request.chapterId, {
+      quizMode: request.quizMode || 'chapter',
+      questionType: request.questionType || null,
+      personalizationContext: request.personalizationContext || ''
+    })
+    const typeLabel = question?.question_type_label || question?.question_type || 'Quiz'
+    let visibleQuestion = ''
+
+    hydrateQuizQuestionCard(card.value, question, request.personalizationContext || '', {
+      questionContent: '',
+      questionSummary: `${typeLabel} · 正在呈现题目…`
+    })
+    card.value.loading = true
+    card.value.quizGenerating = true
+    persist()
+
+    await appendWithTypewriter(question?.question_text || '请回答这道 Quiz。', (chunk) => {
+      visibleQuestion += chunk
+      hydrateQuizQuestionCard(card.value, question, request.personalizationContext || '', {
+        questionContent: visibleQuestion,
+        questionSummary: `${typeLabel} · 正在呈现题目…`
+      })
+      card.value.loading = true
+      card.value.quizGenerating = true
+      persist()
+    }, { chunkSize: 3, intervalMs: 18 })
+
+    hydrateQuizQuestionCard(card.value, question, request.personalizationContext || '')
+    card.value.loading = false
+    card.value.quizGenerating = false
+    persist()
+    updateTitle()
+
+    if (card.value.noteId) {
+      apiClient.put(`/notes/${card.value.noteId}`, {
+        note_content: card.value.noteContent,
+        title: card.value.questionSummary
+      }).catch((error) => {
+        console.error('Failed to persist regenerated Quiz question:', error)
+      })
+    }
+  } catch (error) {
+    card.value.loading = false
+    card.value.quizGenerating = false
+    card.value.quizGenerationError = quizErrorMessage(error)
+    card.value.messages = []
+    persist()
+    updateTitle()
+  }
+}
+
+const handleRegenerateQuiz = () => {
+  generateQuizQuestion()
 }
 
 const handleGoSource = () => {
@@ -129,7 +211,12 @@ onMounted(() => {
   contextText.value = payload.contextText || ''
   metadata.value = payload.metadata || {}
   mode.value = payload.mode || 'note'
+  quizRequest.value = payload.quizRequest || null
   updateTitle()
+  if (mode.value === 'quiz' && quizRequest.value && (!card.value.questionId || card.value.quizGenerating)) {
+    card.value.loading = false
+    generateQuizQuestion()
+  }
 })
 
 watch(card, () => {

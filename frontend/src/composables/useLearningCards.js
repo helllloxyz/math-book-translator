@@ -192,10 +192,11 @@ export function useLearningCards() {
         return card
     }
 
-    const createQuizQuestionCard = (chapter, question, personalizationContext = '') => {
-        const sourceTitle = subjectTitle(chapter)
+    const hydrateQuizQuestionCard = (card, question, personalizationContext = '', options = {}) => {
         const questionText = question?.question_text || '请回答这道 Quiz。'
-        const questionType = question?.question_type || 'concept_explain'
+        const visibleQuestion = options.questionContent ?? questionText
+        const questionType = question?.question_type || card?.questionType || 'concept_explain'
+        const questionTypeLabel = question?.question_type_label || card?.questionTypeLabel || ''
         const quizMetadata = {
             questionId: question?.id || null,
             questionType,
@@ -203,33 +204,66 @@ export function useLearningCards() {
             rubric: question?.evaluation_rubric || {},
             personalizationContext: personalizationContext || '',
             questionText,
-            quizMode: question?.quiz_mode || 'chapter',
-            questionTypeLabel: question?.question_type_label || '',
+            quizMode: question?.quiz_mode || card?.quizMode || 'chapter',
+            questionTypeLabel,
             answerGuidance: question?.answer_guidance || ''
         }
+
+        card.questionId = quizMetadata.questionId
+        card.questionType = quizMetadata.questionType
+        card.expectedPoints = quizMetadata.expectedPoints
+        card.rubric = quizMetadata.rubric
+        card.personalizationContext = quizMetadata.personalizationContext
+        card.questionText = quizMetadata.questionText
+        card.quizMode = quizMetadata.quizMode
+        card.questionTypeLabel = quizMetadata.questionTypeLabel
+        card.answerGuidance = quizMetadata.answerGuidance
+        card.questionSummary = options.questionSummary
+            || `${questionTypeLabel || questionType}：${questionText.replace(/\s+/g, ' ').slice(0, 60)}`
+        card.messages = [{ role: 'assistant', content: visibleQuestion }]
+        card.noteContent = serializeCardMessages(card.messages, card)
+        return card
+    }
+
+    const createPendingQuizCard = (chapter, options = {}) => {
+        const sourceTitle = subjectTitle(chapter)
         const card = toAskCard({
             id: null,
-            tempId: `quiz_question:${chapter.id}:${question?.id || ++tempCardCounter}`,
+            tempId: `quiz_pending:${chapter.id}:temp:${++tempCardCounter}`,
             type: 'quiz_chat',
             selected_text: '',
-            note_content: serializeCardMessages([{ role: 'assistant', content: questionText }], quizMetadata),
+            note_content: '',
             title: `Quiz：${sourceTitle}`,
             source_type: chapter.sourceType || chapter.source_type,
             source_id: chapter.sourceId || chapter.source_id,
             source_title: sourceTitle
         }, chapter)
-        card.questionId = quizMetadata.questionId
-        card.questionType = questionType
-        card.expectedPoints = quizMetadata.expectedPoints
-        card.rubric = quizMetadata.rubric
-        card.personalizationContext = quizMetadata.personalizationContext
-        card.questionText = questionText
-        card.quizMode = quizMetadata.quizMode
-        card.questionTypeLabel = quizMetadata.questionTypeLabel
-        card.answerGuidance = quizMetadata.answerGuidance
-        card.questionSummary = `${quizMetadata.questionTypeLabel || questionType}：${questionText.replace(/\s+/g, ' ').slice(0, 60)}`
-        card.messages = [{ role: 'assistant', content: questionText }]
-        card.noteContent = serializeCardMessages(card.messages, card)
+        card.quizMode = options.quizMode || 'chapter'
+        card.questionType = options.questionType || ''
+        card.personalizationContext = options.personalizationContext || ''
+        card.questionSummary = '正在准备一道新题…'
+        card.messages = [{ role: 'assistant', content: '' }]
+        card.loading = true
+        card.quizGenerating = true
+        card.quizGenerationError = ''
+        askCards.value.unshift(card)
+        return card
+    }
+
+    const createQuizQuestionCard = (chapter, question, personalizationContext = '') => {
+        const sourceTitle = subjectTitle(chapter)
+        const card = toAskCard({
+            id: null,
+            tempId: `quiz_question:${chapter.id}:${question?.id || ++tempCardCounter}`,
+            type: 'quiz_chat',
+            selected_text: '',
+            note_content: '',
+            title: `Quiz：${sourceTitle}`,
+            source_type: chapter.sourceType || chapter.source_type,
+            source_id: chapter.sourceId || chapter.source_id,
+            source_title: sourceTitle
+        }, chapter)
+        hydrateQuizQuestionCard(card, question, personalizationContext)
         askCards.value.unshift(card)
         return card
     }
@@ -302,7 +336,9 @@ export function useLearningCards() {
         createChapterCard,
         ensureChapterCard,
         ensureQuizCard,
+        createPendingQuizCard,
         createQuizQuestionCard,
+        hydrateQuizQuestionCard,
         ensureSelectionCard,
         activateAskCard,
         loadAskNotes,

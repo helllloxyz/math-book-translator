@@ -53,6 +53,18 @@
             <p v-if="!standalone" class="header-meta">{{ modelLabel }} · {{ sourceCount }} {{ sourceCount === 1 ? 'source' : 'sources' }}</p>
             <div v-if="standalone" class="standalone-actions" aria-label="Conversation actions">
               <button
+                v-if="isQuiz"
+                type="button"
+                class="regenerate-quiz-button"
+                :disabled="card.loading"
+                title="重新出题"
+                aria-label="重新出题"
+                @click="emit('regenerate')"
+              >
+                <svg class="action-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.34 5.66" /><path d="M20 4v7h-7" /></svg>
+                <span>重新出题</span>
+              </button>
+              <button
                 v-if="canGoSource"
                 type="button"
                 class="source-button"
@@ -123,7 +135,7 @@
                   <div v-html="renderMessage(message.content)"></div>
                 </template>
                 <template v-else>
-                  <div class="answer-prose" v-html="renderMessage(message.content)"></div>
+                  <div class="answer-prose" :class="{ 'typewriter-active': isTypingMessage(index, message) }" v-html="renderMessage(message.content)"></div>
                   <section v-if="message.suggestedQuestions.length" class="suggested-questions-section" aria-label="Suggested questions">
                     <span>Suggested questions</span>
                     <div class="suggested-question-tags">
@@ -142,6 +154,11 @@
               <div v-if="isWaitingForFirstToken" class="thinking-indicator" role="status" aria-live="polite">
                 <span class="loading-spinner" aria-hidden="true"></span>
                 <span>{{ loadingLabel }}</span>
+              </div>
+              <div v-if="isQuiz && card.quizGenerationError" class="quiz-generation-error" role="alert">
+                <strong>这次出题没成功</strong>
+                <p>{{ card.quizGenerationError }}</p>
+                <button type="button" @click="emit('regenerate')">再试一次</button>
               </div>
             </template>
           </section>
@@ -167,11 +184,11 @@
               <textarea
                 v-model="draft"
                 :placeholder="placeholder"
-                :disabled="card.loading"
+                :disabled="card.loading || quizQuestionUnavailable"
                 rows="2"
                 @keydown.enter.exact.prevent="submitPrompt"
               ></textarea>
-              <button type="submit" :disabled="card.loading || !draft.trim()" :aria-label="card.loading ? loadingLabel : 'Send'">
+              <button type="submit" :disabled="card.loading || quizQuestionUnavailable || !draft.trim()" :aria-label="card.loading ? loadingLabel : 'Send'">
                 <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                   <path d="M2 8L14 2L9.3 8L14 14L2 8Z" fill="currentColor"/>
                 </svg>
@@ -230,7 +247,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['close', 'send', 'go-source', 'delete'])
+const emit = defineEmits(['close', 'send', 'regenerate', 'go-source', 'delete'])
 
 const draft = ref('')
 const dialogRef = ref(null)
@@ -304,6 +321,17 @@ const isWaitingForFirstToken = computed(() => {
   return !String(lastAssistant?.content || '').trim()
 })
 
+const quizQuestionUnavailable = computed(() => (
+  isQuiz.value && (!props.card?.questionId || Boolean(props.card?.quizGenerationError))
+))
+
+const isTypingMessage = (index, message) => (
+  Boolean(props.card?.quizGenerating)
+  && message?.role === 'assistant'
+  && index === displayMessages.value.length - 1
+  && Boolean(String(message?.content || '').trim())
+)
+
 const metadataFields = computed(() => {
   const info = props.metadataInfo || {}
   return [
@@ -318,6 +346,8 @@ const metadataFields = computed(() => {
 })
 
 const placeholder = computed(() => {
+  if (isQuiz.value && props.card?.quizGenerationError) return '重新出题后即可作答'
+  if (isQuiz.value && props.card?.quizGenerating) return '题目生成中…'
   if (isQuiz.value) return '用自己的话讲讲，不必输入公式…'
   if (isChapterNote.value) return 'Ask about this chapter...'
   return 'Ask about this note...'
@@ -338,7 +368,10 @@ const resetDraft = () => {
 
 const showEmptyMessage = computed(() => !messages.value.length && !isQuiz.value)
 
-const loadingLabel = computed(() => isQuiz.value ? 'Checking...' : 'Sending...')
+const loadingLabel = computed(() => {
+  if (isQuiz.value && props.card?.quizGenerating) return '正在为你准备题目…'
+  return isQuiz.value ? '正在检查回答…' : 'Sending...'
+})
 
 const renderMessage = (messageContent) => renderMarkdown(messageContent)
 
@@ -651,6 +684,34 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   margin-left: auto;
+}
+
+.regenerate-quiz-button {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 0.5px solid rgba(8, 80, 65, 0.24);
+  border-radius: 999px;
+  background: rgba(225, 245, 238, 0.76);
+  color: #085041;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  transition: background-color 160ms ease, border-color 160ms ease, opacity 160ms ease;
+}
+
+.regenerate-quiz-button:hover:not(:disabled) {
+  border-color: rgba(8, 80, 65, 0.42);
+  background: #d3f0e6;
+}
+
+.regenerate-quiz-button:disabled {
+  cursor: wait;
+  opacity: 0.48;
 }
 
 .header-meta {
@@ -1010,6 +1071,22 @@ onUnmounted(() => {
   margin-bottom: 0;
 }
 
+.typewriter-active::after {
+  content: '';
+  display: inline-block;
+  width: 0.45em;
+  height: 1.05em;
+  margin-left: 0.18em;
+  border-radius: 2px;
+  background: #1d9e75;
+  vertical-align: -0.14em;
+  animation: quiz-caret 0.78s steps(1, end) infinite;
+}
+
+@keyframes quiz-caret {
+  50% { opacity: 0; }
+}
+
 .thinking-indicator {
   display: inline-flex;
   align-items: center;
@@ -1027,6 +1104,39 @@ onUnmounted(() => {
   border-top-color: var(--dialog-blue);
   border-radius: 999px;
   animation: dialog-spin 0.8s linear infinite;
+}
+
+.quiz-generation-error {
+  max-width: 34rem;
+  padding: 16px 18px;
+  border: 0.5px solid rgba(150, 72, 45, 0.22);
+  border-radius: 12px;
+  background: rgba(255, 247, 241, 0.88);
+  color: #6d3524;
+}
+
+.quiz-generation-error strong,
+.quiz-generation-error p {
+  display: block;
+  margin: 0;
+}
+
+.quiz-generation-error p {
+  margin-top: 5px;
+  color: #82513f;
+  font-size: 13px;
+}
+
+.quiz-generation-error button {
+  margin-top: 12px;
+  padding: 6px 11px;
+  border: 0;
+  border-radius: 999px;
+  background: #6d3524;
+  color: #fffaf6;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
 }
 
 @keyframes dialog-spin {

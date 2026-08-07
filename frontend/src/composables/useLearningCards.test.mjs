@@ -13,7 +13,9 @@ const {
   activeConversationId,
   askCards,
   createChapterCard,
+  createPendingQuizCard,
   createQuizQuestionCard,
+  hydrateQuizQuestionCard,
   ensureChapterCard,
   ensureSelectionCard,
   loadAskNotes
@@ -51,6 +53,24 @@ assert.equal(selectionNote.contextScope, 'selection', 'selection-only notes shou
 
 const chapterNoteFromSelection = createChapterCard(chapter, { initialPrompt: 'What does this orientation condition mean?' })
 assert.equal(chapterNoteFromSelection.initialPrompt, 'What does this orientation condition mean?', 'chapter notes opened from a selection should prefill the composer without narrowing chapter context')
+
+const pendingQuizCard = createPendingQuizCard(chapter, {
+  quizMode: 'chapter',
+  questionType: 'proof_strategy'
+})
+assert.equal(pendingQuizCard.loading, true, 'a new Quiz page should start in a visible generating state')
+assert.equal(pendingQuizCard.quizGenerating, true)
+assert.equal(pendingQuizCard.questionType, 'proof_strategy')
+assert.deepEqual(pendingQuizCard.messages, [{ role: 'assistant', content: '' }])
+
+hydrateQuizQuestionCard(pendingQuizCard, {
+  id: 8,
+  question_type: 'proof_strategy',
+  question_type_label: '证明策略',
+  question_text: 'Explain the key turn in this proof.'
+}, '', { questionContent: 'Explain the key' })
+assert.equal(pendingQuizCard.questionId, 8)
+assert.equal(pendingQuizCard.messages[0].content, 'Explain the key', 'Quiz question metadata should support progressive question reveal')
 
 const quizCard = createQuizQuestionCard(chapter, {
   id: 9,

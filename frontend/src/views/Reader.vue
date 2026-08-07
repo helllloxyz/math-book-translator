@@ -166,8 +166,7 @@ const {
   activeConversationId,
   askCards,
   createChapterCard,
-  createQuizQuestionCard,
-  ensureQuizCard,
+  createPendingQuizCard,
   ensureSelectionCard,
   activateAskCard,
   loadAskNotes,
@@ -656,25 +655,21 @@ const openChapterNote = async () => {
   await activateNoteCard(card)
 }
 
-const openQuizDialog = async (options = {}) => {
+const openQuizDialog = (options = {}) => {
   const subject = currentToolSubject.value
   if (!subject || !currentChapter.value?.id) return
-  let card = null
-  try {
-    const question = await bookStore.fetchNextQuizQuestion(currentChapter.value.id, {
-      quizMode: options.quizMode || 'chapter',
-      questionType: options.questionType,
-      personalizationContext: options.personalizationContext
-    })
-    card = createQuizQuestionCard(subject, question, options.personalizationContext || '')
-  } catch (error) {
-    console.error('Failed to load structured quiz question:', error)
-    card = ensureQuizCard(subject)
+  const quizRequest = {
+    chapterId: currentChapter.value.id,
+    quizMode: options.quizMode || 'chapter',
+    questionType: options.questionType || '',
+    personalizationContext: options.personalizationContext || ''
   }
-  await activateNoteCard(card)
+  const card = createPendingQuizCard(subject, quizRequest)
+  activateAskCard(card)
+  openConversationPage(card, { quizRequest })
 }
 
-const openConversationPage = async (card) => {
+const openConversationPage = async (card, options = {}) => {
   if (!book.value || !currentItem.value || !card) return
 
   const metadata = buildConversationMetadata(book.value, currentItem.value)
@@ -686,6 +681,19 @@ const openConversationPage = async (card) => {
       conversationId
     }
   })
+
+  if (options.quizRequest) {
+    saveConversationPayload(conversationId, {
+      mode: 'quiz',
+      card,
+      contextText: '',
+      metadata,
+      quizRequest: options.quizRequest,
+      title: buildConversationDocumentTitle(card, metadata)
+    })
+    window.open(routeData.href, '_blank', 'noopener')
+    return
+  }
 
   const contextText = await buildReaderItemContext(card)
 
@@ -827,7 +835,7 @@ onMounted(async () => {
     } catch (_error) {
       personalization = ''
     }
-    await openQuizDialog({
+    openQuizDialog({
       quizMode: String(route.query.quiz_mode || 'book'),
       questionType: String(route.query.question_type || ''),
       personalizationContext: personalization

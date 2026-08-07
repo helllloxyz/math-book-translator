@@ -6,8 +6,10 @@ import { dirname, resolve } from 'node:path'
 const currentDir = dirname(fileURLToPath(import.meta.url))
 const source = readFileSync(resolve(currentDir, 'Reader.vue'), 'utf8')
 
-assert.match(source, /fetchNextQuizQuestion/, 'Reader Quiz should call the structured quiz next endpoint')
-assert.match(source, /createQuizQuestionCard/, 'Reader Quiz should create a structured quiz card')
+assert.doesNotMatch(source, /await bookStore\.fetchNextQuizQuestion/, 'Reader should not wait for Quiz generation before opening the conversation page')
+assert.match(source, /createPendingQuizCard/, 'Reader Quiz should create a visible pending card before requesting a question')
+assert.match(source, /openConversationPage\(card, \{ quizRequest \}\)/, 'Reader should hand question generation to the new Quiz page')
+assert.match(source, /if \(options\.quizRequest\)[\s\S]*?window\.open/, 'Reader should open the Quiz page synchronously from the click path')
 assert.match(source, /questionType:\s*String\(route\.query\.question_type/, 'Reader should use Book Quiz selected question type')
 assert.match(source, /quizMode:\s*String\(route\.query\.quiz_mode \|\| 'book'\)/, 'Reader should explicitly preserve Book Quiz mode')
 assert.match(source, /buildReaderItemQuery/, 'Reader should write selected reader identity into the URL query')
