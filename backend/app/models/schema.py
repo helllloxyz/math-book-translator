@@ -220,6 +220,18 @@ class SettingsRequest(BaseModel):
     storage_path: Optional[str] = None
     llm_profile: Optional[LLMProfile] = None
     llm_profiles: Optional[Dict[str, LLMProfile]] = None
+    learning_profile_enabled: Optional[bool] = None
+
+
+class ChapterReadingStatusRequest(BaseModel):
+    chapter_id: int
+    progress: str = "unread"
+    difficulty: str = "unmarked"
+
+
+class LearningProfileCheckRequest(BaseModel):
+    reading_statuses: List[ChapterReadingStatusRequest] = Field(default_factory=list)
+    current_chapter_id: Optional[int] = None
 
 class CredentialWriteRequest(BaseModel):
     credential_id: str

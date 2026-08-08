@@ -1,7 +1,9 @@
+import { flattenReaderLeaves } from './readerTree.js'
+
 const STORAGE_PREFIX = 'math-book-reader-status'
 
 const progressValues = new Set(['unread', 'reading', 'skipped', 'finished'])
-const difficultyValues = new Set(['easy', 'confused', 'hard'])
+const difficultyValues = new Set(['unmarked', 'confused', 'hard'])
 
 export const progressOptions = [
   { value: 'unread', label: '未阅读' },
@@ -11,23 +13,24 @@ export const progressOptions = [
 ]
 
 export const difficultyOptions = [
-  { value: 'easy', label: '简单' },
+  { value: 'unmarked', label: '未标记' },
   { value: 'confused', label: '困惑' },
   { value: 'hard', label: '困难' },
 ]
 
 export const defaultChapterReadingStatus = () => ({
   progress: 'unread',
-  difficulty: 'easy',
+  difficulty: 'unmarked',
 })
 
 const storageKey = (bookId, chapterId) => `${STORAGE_PREFIX}:${bookId}:${chapterId}`
 
 const normalizeChapterReadingStatus = (status = {}) => {
   const defaults = defaultChapterReadingStatus()
+  const difficulty = status.difficulty === 'easy' ? 'unmarked' : status.difficulty
   return {
     progress: progressValues.has(status.progress) ? status.progress : defaults.progress,
-    difficulty: difficultyValues.has(status.difficulty) ? status.difficulty : defaults.difficulty,
+    difficulty: difficultyValues.has(difficulty) ? difficulty : defaults.difficulty,
   }
 }
 
@@ -50,4 +53,20 @@ export const setChapterReadingStatus = (bookId, chapterId, status) => {
 
   localStorage.setItem(storageKey(bookId, chapterId), JSON.stringify(normalized))
   return normalized
+}
+
+export const getBookChapterReadingStatuses = (bookId, bookTree = []) => {
+  const seen = new Set()
+  return flattenReaderLeaves(bookTree)
+    .filter((item) => item.type === 'chapter' && Number.isFinite(Number(item.chapter_id)))
+    .filter((item) => {
+      const chapterId = Number(item.chapter_id)
+      if (seen.has(chapterId)) return false
+      seen.add(chapterId)
+      return true
+    })
+    .map((item) => ({
+      chapter_id: Number(item.chapter_id),
+      ...getChapterReadingStatus(bookId, item.chapter_id),
+    }))
 }

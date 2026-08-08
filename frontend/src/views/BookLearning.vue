@@ -50,20 +50,14 @@
           </div>
         </div>
 
-        <aside class="evidence-block" :class="{ 'has-pending': snapshot.profile.should_analyze }">
+        <aside class="evidence-block" :class="{ 'has-pending': snapshot.profile.should_analyze, 'is-disabled': !snapshot.profile.enabled }">
           <div class="evidence-topline">
             <span class="live-dot" aria-hidden="true"></span>
             LEARNING EVIDENCE
           </div>
-          <strong>{{ snapshot.profile.should_analyze ? '有新证据待整理' : '画像与记录同步' }}</strong>
+          <strong>{{ !snapshot.profile.enabled ? '自动画像已关闭' : snapshot.profile.analysis_running ? '正在自动整理' : snapshot.profile.should_analyze ? '新证据正在排队' : '画像与记录同步' }}</strong>
           <p>{{ profilePendingText }}</p>
-          <button
-            type="button"
-            :disabled="!snapshot.profile.should_analyze || Boolean(loadingAction)"
-            @click="analyzeProfile"
-          >
-            {{ loadingAction === 'profile' ? '正在分析…' : snapshot.profile.should_analyze ? '更新学习画像' : '画像已是最新' }}
-          </button>
+          <span class="auto-profile-state">{{ snapshot.profile.enabled ? '进入阅读时自动检查' : '可在应用设置中开启' }}</span>
         </aside>
       </section>
 
@@ -86,7 +80,7 @@
         <div>
           <dt>学习笔记</dt>
           <dd>{{ snapshot.activity.notes }}</dd>
-          <small>{{ totalPendingEvidence }} 条待纳入画像</small>
+          <small>{{ snapshot.profile.enabled ? `${totalPendingEvidence} 条待纳入画像` : '画像功能已关闭' }}</small>
         </div>
       </dl>
 
@@ -181,9 +175,9 @@
               <span>待处理证据</span>
               <strong>{{ totalPendingEvidence }} 条</strong>
             </div>
-            <button class="button button-primary" type="button" :disabled="!snapshot.profile.should_analyze || Boolean(loadingAction)" @click="analyzeProfile">
-              {{ loadingAction === 'profile' ? '正在分析' : snapshot.profile.should_analyze ? '更新画像' : '画像已是最新' }}
-            </button>
+            <div class="profile-auto-note">
+              {{ snapshot.profile.enabled ? '画像会在进入阅读时自动增量更新。' : '自动画像已关闭，现有结果保持不变。' }}
+            </div>
           </aside>
           <article ref="profileRef" class="profile-document markdown-content" v-html="profileHtml"></article>
         </div>
@@ -204,6 +198,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useBookStore } from '../stores/bookStore'
 import { renderMarkdown, renderMath } from '../utils/renderer'
+import { getBookChapterReadingStatuses } from '../utils/chapterReadingStatus'
 
 const route = useRoute()
 const router = useRouter()
@@ -216,6 +211,7 @@ const loadingAction = ref('')
 const notice = ref(null)
 const profileRef = ref(null)
 let noticeTimer = null
+let profileRefreshTimer = null
 
 const totalPendingEvidence = computed(() => (
   Number(snapshot.value?.profile.unprocessed_notes_count || 0)
@@ -223,8 +219,10 @@ const totalPendingEvidence = computed(() => (
 ))
 
 const profilePendingText = computed(() => {
+  if (!snapshot.value?.profile.enabled) return '开启后才会分析 Quiz、笔记和用户提问，不影响其他阅读功能。'
+  if (snapshot.value?.profile.analysis_running) return '系统正在后台压缩新记录，完成后会更新这本书的画像。'
   if (!snapshot.value?.profile.should_analyze) return '当前没有新的笔记或 Quiz 证据需要分析。'
-  return `${snapshot.value.profile.unprocessed_notes_count || 0} 条笔记、${snapshot.value.profile.unprocessed_quiz_count || 0} 次 Quiz 等待纳入画像。`
+  return `${snapshot.value.profile.unprocessed_notes_count || 0} 条笔记、${snapshot.value.profile.unprocessed_quiz_count || 0} 次 Quiz 将在后台自动整理。`
 })
 
 const profileHtml = computed(() => {
@@ -244,8 +242,8 @@ const showNotice = (message, type = 'success') => {
   }, 4800)
 }
 
-const loadSnapshot = async () => {
-  loading.value = true
+const loadSnapshot = async (options = {}) => {
+  if (!options.silent) loading.value = true
   error.value = ''
   try {
     snapshot.value = await bookStore.fetchBookManagement(bookId.value)
@@ -254,20 +252,21 @@ const loadSnapshot = async () => {
   } catch (err) {
     error.value = err.message || '加载失败'
   } finally {
-    loading.value = false
+    if (!options.silent) loading.value = false
   }
 }
 
-const analyzeProfile = async () => {
-  loadingAction.value = 'profile'
+const checkProfileOnEntry = async () => {
   try {
-    const result = await bookStore.analyzeLearningProfile(bookId.value)
-    showNotice(result.summary || '学习画像已更新')
-    await loadSnapshot()
-  } catch (err) {
-    showNotice(err.message, 'error')
-  } finally {
-    loadingAction.value = ''
+    const tree = await bookStore.fetchReaderTree(bookId.value)
+    const bookTree = Array.isArray(tree?.book) ? tree.book : []
+    const result = await bookStore.checkLearningProfile(bookId.value, {
+      readingStatuses: getBookChapterReadingStatuses(bookId.value, bookTree)
+    })
+    return Boolean(result?.scheduled || result?.analysis_running)
+  } catch (_error) {
+    // The learning page remains useful even when the optional automatic check fails.
+    return false
   }
 }
 
@@ -298,9 +297,16 @@ const formatPercent = value => value === null || value === undefined ? '—' : `
 const formatDate = value => value ? new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' }).format(new Date(value)) : '未知日期'
 const formatDateTime = value => value ? new Intl.DateTimeFormat('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(value)) : '尚无记录'
 
-onMounted(loadSnapshot)
+onMounted(async () => {
+  const refreshAfterAnalysis = await checkProfileOnEntry()
+  await loadSnapshot()
+  if (refreshAfterAnalysis) {
+    profileRefreshTimer = window.setTimeout(() => loadSnapshot({ silent: true }), 6000)
+  }
+})
 onBeforeUnmount(() => {
   if (noticeTimer) window.clearTimeout(noticeTimer)
+  if (profileRefreshTimer) window.clearTimeout(profileRefreshTimer)
 })
 </script>
 
@@ -345,7 +351,7 @@ onBeforeUnmount(() => {
 .status-link:focus-visible,
 .section-nav a:focus-visible,
 .button:focus-visible,
-.evidence-block button:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
+.auto-profile-state:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 3px; }
 .section-nav { display: flex; gap: 1.75rem; }
 
 .back-link svg,
@@ -411,16 +417,16 @@ onBeforeUnmount(() => {
 .button-primary:hover:not(:disabled) { border-color: var(--color-accent-dark); background: var(--color-accent-dark); }
 .button-secondary { border: 1px solid var(--color-line-strong); color: var(--color-ink); background: rgba(255,255,255,.55); }
 .button-secondary:hover { background: var(--color-surface-raised); }
-.button:disabled,
-.evidence-block button:disabled { opacity: .55; cursor: not-allowed; }
+.button:disabled { opacity: .55; cursor: not-allowed; }
 
 .evidence-block { padding: 1.4rem 0 1.4rem 1.5rem; border-left: 3px solid var(--color-success); }
 .evidence-block.has-pending { border-color: var(--color-warning); }
+.evidence-block.is-disabled { border-color: var(--color-line-strong); }
 .evidence-topline { display: flex; align-items: center; gap: .5rem; color: var(--color-muted); font-family: var(--font-mono); font-size: .68rem; font-weight: 700; letter-spacing: .1em; }
 .live-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 .evidence-block strong { display: block; margin-top: .7rem; font-size: 1.65rem; line-height: 1.2; letter-spacing: -.03em; }
 .evidence-block p { margin: .7rem 0 0; color: var(--color-muted); font-size: .82rem; line-height: 1.7; }
-.evidence-block button { margin-top: 1rem; padding: .5rem 0; border: 0; border-bottom: 1px solid currentColor; color: var(--color-accent-dark); background: transparent; font-size: .74rem; font-weight: 700; cursor: pointer; }
+.auto-profile-state { display: inline-block; margin-top: 1rem; padding: .5rem 0; border-bottom: 1px solid currentColor; color: var(--color-accent-dark); font-size: .74rem; font-weight: 700; }
 
 .metric-strip { display: grid; grid-template-columns: repeat(4, 1fr); margin: 0; border-block: 1px solid var(--color-line-strong); }
 .metric-strip > div { padding: 1.4rem 1.25rem 1.4rem 0; }
@@ -484,7 +490,7 @@ onBeforeUnmount(() => {
 .profile-meta { position: sticky; top: 1.5rem; display: grid; border-top: 1px solid var(--color-line-strong); }
 .profile-meta > div { display: grid; gap: .3rem; padding: 1rem 0; border-bottom: 1px solid var(--color-line); }
 .profile-meta strong { font-size: .8rem; }
-.profile-meta .button { margin-top: 1rem; }
+.profile-auto-note { margin-top: 1rem; padding: .8rem 0; color: var(--color-muted); font-size: .72rem; line-height: 1.6; }
 .profile-document { min-height: 320px; padding: 2.5rem clamp(1.5rem, 4vw, 4rem); border: 1px solid var(--color-line); border-radius: 16px; background: var(--color-surface-raised); box-shadow: 0 18px 52px rgba(63,49,31,.065); }
 :deep(.profile-document h1),
 :deep(.profile-document h2),
@@ -526,7 +532,7 @@ onBeforeUnmount(() => {
   .metric-strip > div:nth-child(n+3) { border-top: 1px solid var(--color-line); }
   .profile-layout { grid-template-columns: 1fr; gap: 2.5rem; }
   .profile-meta { position: static; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
-  .profile-meta .button { grid-column: 1 / -1; }
+  .profile-auto-note { grid-column: 1 / -1; }
 }
 
 @media (max-width: 720px) {
@@ -546,7 +552,7 @@ onBeforeUnmount(() => {
   .quiz-empty { grid-template-columns: auto 1fr; }
   .quiz-empty .button { grid-column: 1 / -1; }
   .profile-meta { grid-template-columns: 1fr; }
-  .profile-meta .button { grid-column: auto; }
+  .profile-auto-note { grid-column: auto; }
   .profile-document { padding: 1.5rem; }
 }
 

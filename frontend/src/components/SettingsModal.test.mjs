@@ -29,6 +29,8 @@ assert.match(source, /apiKey\.value = draft\?\.api_key \|\| ''/, 'switching prov
 assert.match(source, /if \(configuredModelProfiles\.value\.length && !nextTaskProfiles\.default\)/, 'empty credentials should allow empty default settings')
 assert.match(source, /formError/, 'settings validation should render inline errors')
 assert.doesNotMatch(source, /\balert\s*\(/, 'settings should not use blocking browser alerts')
+assert.match(source, /v-model="settings\.learningProfileEnabled"/, 'settings should expose the automatic learning profile toggle')
+assert.match(source, /learning_profile_enabled: settings\.value\.learningProfileEnabled/, 'settings should persist the learning profile toggle')
 
 const catalog = providerOptions.provider_catalog
 const byId = new Map(catalog.map((provider) => [provider.provider_id, provider]))

@@ -23,6 +23,10 @@ from app.services.book_storage import BookStorage
 @pytest.mark.asyncio
 async def test_management_snapshot_aggregates_content_quiz_and_profile_state(tmp_path, monkeypatch):
     monkeypatch.setenv("STORAGE_DIR", str(tmp_path / "storage"))
+    monkeypatch.setattr(
+        "app.services.learning_profile_service.SettingsService.learning_profile_enabled",
+        staticmethod(lambda: True),
+    )
     engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'management.db'}")
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)

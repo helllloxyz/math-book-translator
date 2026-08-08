@@ -188,6 +188,19 @@ def test_get_current_settings_hides_profiles_without_configured_credentials(tmp_
     assert settings["llm_profiles"] == {}
 
 
+@pytest.mark.asyncio
+async def test_learning_profile_setting_defaults_off_and_persists(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    assert SettingsService.get_current_settings()["learning_profile_enabled"] is False
+
+    await SettingsService.update_settings(SettingsRequest(learning_profile_enabled=True))
+
+    assert SettingsService.get_current_settings()["learning_profile_enabled"] is True
+    saved = json.loads((tmp_path / SettingsService.SETTINGS_FILE).read_text(encoding="utf-8"))
+    assert saved["learning_profile_enabled"] is True
+
+
 def test_cors_disables_credentials_when_wildcard_origin(monkeypatch):
     monkeypatch.setenv("CORS_ALLOW_ORIGINS", "*")
     monkeypatch.delenv("CORS_ALLOW_CREDENTIALS", raising=False)

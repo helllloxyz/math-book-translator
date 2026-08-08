@@ -1133,6 +1133,12 @@
   background: var(--color-success-soft);
 }
 
+#app .status-difficulty-unmarked {
+  border-color: var(--color-line);
+  color: var(--color-muted);
+  background: var(--color-surface-muted);
+}
+
 #app .status-difficulty-hard {
   border-color: #ddb7b2;
   color: #7e3935;

@@ -339,6 +339,20 @@ export const useBookStore = defineStore('book', {
         throw err
       }
     },
+    async checkLearningProfile(bookId, options = {}) {
+      try {
+        const response = await apiClient.post(`/books/${bookId}/quiz/profile/check`, {
+          reading_statuses: Array.isArray(options.readingStatuses)
+            ? options.readingStatuses
+            : (options.reading_statuses || []),
+          current_chapter_id: options.currentChapterId || options.current_chapter_id || null
+        })
+        return response.data
+      } catch (err) {
+        this.error = err.message
+        throw err
+      }
+    },
     async fetchLearningProfile(bookId) {
       try {
         const response = await apiClient.get(`/books/${bookId}/quiz/profile`)

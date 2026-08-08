@@ -1,8 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.base import get_db
-from app.models.schema import QuizAttemptRequest, QuizNextRequest, QuizSelectTargetRequest
+from app.models.schema import (
+    LearningProfileCheckRequest,
+    QuizAttemptRequest,
+    QuizNextRequest,
+    QuizSelectTargetRequest,
+)
 from app.services.learning_profile_service import LearningProfileService
 from app.services.quiz_service import QuizService
 
@@ -23,6 +28,32 @@ async def analyze_learning_profile(book_id: int, db: AsyncSession = Depends(get_
     if result is None:
         raise HTTPException(status_code=404, detail="Book not found")
     return result
+
+
+@router.post("/books/{book_id}/quiz/profile/check", status_code=202)
+async def check_learning_profile(
+    book_id: int,
+    request: LearningProfileCheckRequest,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_db),
+):
+    status = await LearningProfileService.status(book_id, db)
+    if status.get("book") is None and set(status) == {"book"}:
+        raise HTTPException(status_code=404, detail="Book not found")
+    if not status.get("enabled"):
+        return {**status, "scheduled": False}
+
+    await LearningProfileService.sync_reading_progress(
+        book_id,
+        request.reading_statuses,
+        request.current_chapter_id,
+        db,
+    )
+    status = await LearningProfileService.status(book_id, db)
+    scheduled = bool(status.get("should_analyze") and not status.get("analysis_running"))
+    if scheduled:
+        background_tasks.add_task(LearningProfileService.analyze_in_background, book_id)
+    return {**status, "scheduled": scheduled}
 
 
 @router.get("/books/{book_id}/quiz/profile")

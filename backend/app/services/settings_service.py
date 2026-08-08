@@ -57,6 +57,9 @@ class SettingsService:
                 existing["llm_profiles"] = SettingsService._sanitize_profiles(requested_profiles)
                 existing.pop("llm_profile", None)
 
+            if settings.learning_profile_enabled is not None:
+                existing["learning_profile_enabled"] = bool(settings.learning_profile_enabled)
+
             # Do not persist or expose legacy secret-bearing settings.
             for secret_key in ("providers", "api_keys", "api_key", "model_names", "model_name", "llm_provider"):
                 existing.pop(secret_key, None)
@@ -80,7 +83,8 @@ class SettingsService:
         
         return {
             "storage_path": os.getenv("STORAGE_DIR", "storage"),
-            "llm_profiles": {}
+            "llm_profiles": {},
+            "learning_profile_enabled": False,
         }
 
     @staticmethod
@@ -89,8 +93,13 @@ class SettingsService:
             "storage_path": settings.get("storage_path", os.getenv("STORAGE_DIR", "storage")),
             "llm_profile": SettingsService._sanitize_profile(settings.get("llm_profile", {})),
             "llm_profiles": SettingsService._sanitize_profiles(settings.get("llm_profiles", {})),
+            "learning_profile_enabled": bool(settings.get("learning_profile_enabled", False)),
         }
         return public
+
+    @staticmethod
+    def learning_profile_enabled() -> bool:
+        return bool(SettingsService.get_current_settings().get("learning_profile_enabled", False))
 
     @staticmethod
     def _configured_credential_keys() -> set[str]:

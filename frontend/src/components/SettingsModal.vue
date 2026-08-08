@@ -24,6 +24,24 @@
             />
           </section>
 
+          <section class="learning-profile-strip">
+            <div class="field-heading">
+              <label for="learning-profile-toggle">自动生成学习画像</label>
+              <small>进入阅读时，自动增量总结当前书的 Quiz、笔记与用户提问。开启后会产生额外模型 Token 消耗。</small>
+            </div>
+            <label class="setting-switch" for="learning-profile-toggle">
+              <input
+                id="learning-profile-toggle"
+                v-model="settings.learningProfileEnabled"
+                type="checkbox"
+                role="switch"
+                :aria-checked="settings.learningProfileEnabled"
+              />
+              <span class="switch-track" aria-hidden="true"><span></span></span>
+              <span class="switch-label">{{ settings.learningProfileEnabled ? '已开启' : '已关闭' }}</span>
+            </label>
+          </section>
+
           <section class="settings-grid">
             <aside class="task-panel">
               <div class="section-label">模型服务</div>
@@ -199,7 +217,8 @@ const props = defineProps({
 const emit = defineEmits(['close', 'save'])
 
 const settings = ref({
-  storagePath: ''
+  storagePath: '',
+  learningProfileEnabled: false
 })
 
 const providerCatalog = ref([])
@@ -545,7 +564,8 @@ onMounted(async () => {
     credentials.value = credentialsResponse.data.credentials || []
     taskProfiles.value = profiles
     settings.value = {
-      storagePath: data.storage_path || 'storage'
+      storagePath: data.storage_path || 'storage',
+      learningProfileEnabled: Boolean(data.learning_profile_enabled)
     }
     const defaultProviderId = profiles.default?.provider_id
     const configuredDefaultProviderId = credentialForProviderId(defaultProviderId) ? defaultProviderId : ''
@@ -563,6 +583,7 @@ onMounted(async () => {
     if (saved) {
       const parsed = JSON.parse(saved)
       settings.value.storagePath = parsed.storagePath
+      settings.value.learningProfileEnabled = Boolean(parsed.learningProfileEnabled)
     }
   }
 })
@@ -606,12 +627,14 @@ const saveSettings = async () => {
 
     await apiClient.post('/settings', {
       storage_path: settings.value.storagePath,
-      llm_profiles: nextTaskProfiles
+      llm_profiles: nextTaskProfiles,
+      learning_profile_enabled: settings.value.learningProfileEnabled
     })
     taskProfiles.value = nextTaskProfiles
     
     localStorage.setItem('app_settings', JSON.stringify({
-      storagePath: settings.value.storagePath
+      storagePath: settings.value.storagePath,
+      learningProfileEnabled: settings.value.learningProfileEnabled
     }))
     emit('save', settings.value)
     emit('close')
@@ -735,6 +758,69 @@ const saveSettings = async () => {
   border: 1px solid rgba(219, 227, 234, 0.95);
   border-radius: 16px;
   background: var(--modal-panel);
+}
+
+.learning-profile-strip {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.85rem;
+  border: 1px solid rgba(37, 99, 235, 0.16);
+  border-radius: 16px;
+  background: rgba(239, 246, 255, 0.55);
+}
+
+.setting-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: var(--modal-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.setting-switch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+}
+
+.switch-track {
+  width: 42px;
+  height: 24px;
+  padding: 3px;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #e2e8f0;
+  transition: background 0.18s, border-color 0.18s;
+}
+
+.switch-track span {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 2px 5px rgba(15, 23, 42, 0.2);
+  transition: transform 0.18s;
+}
+
+.setting-switch input:checked + .switch-track {
+  border-color: var(--modal-accent);
+  background: var(--modal-accent);
+}
+
+.setting-switch input:checked + .switch-track span {
+  transform: translateX(18px);
+}
+
+.setting-switch input:focus-visible + .switch-track {
+  outline: 3px solid rgba(37, 99, 235, 0.2);
+  outline-offset: 2px;
 }
 
 .field-heading label,
@@ -1056,6 +1142,7 @@ const saveSettings = async () => {
   }
 
   .storage-strip,
+  .learning-profile-strip,
   .settings-grid,
   .compact-fields,
   .default-option-row {

@@ -136,6 +136,7 @@ import { useReaderContent } from '../composables/useReaderContent'
 import { useSelectionMenu } from '../composables/useSelectionMenu'
 import {
   defaultChapterReadingStatus,
+  getBookChapterReadingStatuses,
   getChapterReadingStatus,
   setChapterReadingStatus
 } from '../utils/chapterReadingStatus'
@@ -790,6 +791,16 @@ const focusRouteNote = async () => {
   }
 }
 
+const checkLearningProfileInBackground = () => {
+  if (!book.value?.id || !bookTree.value.length) return
+  bookStore.checkLearningProfile(book.value.id, {
+    readingStatuses: getBookChapterReadingStatuses(book.value.id, bookTree.value),
+    currentChapterId: currentChapter.value?.id || null
+  }).catch((error) => {
+    console.debug('Automatic learning profile check skipped:', error.message)
+  })
+}
+
 onMounted(async () => {
   const routeBookId = Number(route.params.id)
   let bookId = Number.isFinite(routeBookId) ? routeBookId : book.value?.id
@@ -820,6 +831,7 @@ onMounted(async () => {
 
   await loadItemFromRouteQuery()
   await focusRouteNote()
+  checkLearningProfileInBackground()
   if (route.query.quiz === '1') {
     let personalization = ''
     try {

@@ -33,6 +33,8 @@ assert.match(source, /loadItemFromRouteQuery/, 'Reader should load content from 
 assert.match(source, /getFurthestReadChapter/, 'Reader should restore the furthest chapter when opened without an explicit target')
 assert.match(source, /hasExplicitReaderTarget[\s\S]*?findReaderLeafByRouteQuery/, 'explicit chapter and guide deep links should override automatic resume')
 assert.match(source, /rememberFurthestReadChapter/, 'Reader should update furthest reading progress as chapters open')
+assert.match(source, /checkLearningProfileInBackground/, 'Reader should check the optional learning profile on entry')
+assert.match(source, /getBookChapterReadingStatuses/, 'Reader should sync per-chapter reading state with the profile check')
 assert.match(source, /route\.query\.chapter_id/, 'Reader should react when the chapter_id query changes on the same reader route')
 assert.match(source, /sidebarOpen/, 'Reader should let the toolbar collapse the table of contents')
 assert.match(source, /focusRouteNote/, 'Reader should restore and highlight a note opened from the Notes page')
@@ -57,6 +59,7 @@ const designSystem = readFileSync(resolve(currentDir, '../design-system.css'), '
 assert.match(globalStyles, /::selection\s*\{[\s\S]*?var\(--color-selection-soft\)/, 'native text selections should use the dedicated blue selection color')
 assert.match(designSystem, /#app \.selected-text-preview\s*\{[\s\S]*?var\(--color-selection-soft\)/, 'saved text selections should use the dedicated blue selection color')
 assert.match(designSystem, /#app \.question-block\s*\{[\s\S]*?var\(--color-question-soft\)/, 'Note questions should use a quiet neutral surface instead of the brand accent')
+assert.match(designSystem, /#app \.status-difficulty-unmarked/, 'unmarked should be the neutral default difficulty treatment')
 assert.match(globalStyles, /\.latex-content strong\s*\{[\s\S]*?font-weight:\s*700;[\s\S]*?var\(--color-emphasis-mark\)/, 'Markdown bold text should have a clearly visible editorial emphasis treatment')
 assert.match(globalStyles, /\.latex-content \.katex-display > \.katex > \.katex-html\s*\{[\s\S]*?display:\s*flex;[\s\S]*?flex-wrap:\s*wrap;/, 'long display formulas should wrap inside the reading column instead of requiring horizontal scrolling')
 

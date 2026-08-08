@@ -30,7 +30,8 @@ assert.match(storeSource, /async fetchBookManagement\(id\)/, 'book store should 
 assert.match(storeSource, /async retranslateChapter\(bookId, chapterId\)/, 'book store should expose chapter retranslation')
 assert.match(storeSource, /async generateChapterGuide\(bookId, chapterId\)/, 'book store should expose chapter guide generation')
 assert.match(learningSource, /selectBookQuizTarget/, 'learning page should start a full-book quiz')
-assert.match(learningSource, /analyzeLearningProfile/, 'learning page should update the learning profile')
+assert.match(learningSource, /checkLearningProfile/, 'learning page should automatically check the learning profile')
+assert.doesNotMatch(learningSource, /@click="analyzeProfile"/, 'learning page should not require a manual profile update button')
 assert.match(learningSource, /v-html="profileHtml"/, 'learning page should render the profile document')
 
 console.log('Book management page wiring ok')

@@ -195,7 +195,7 @@ defineEmits([
 
 const toolbarRef = ref(null)
 const progressClass = computed(() => `status-progress-${props.readingStatus.progress || 'unread'}`)
-const difficultyClass = computed(() => `status-difficulty-${props.readingStatus.difficulty || 'easy'}`)
+const difficultyClass = computed(() => `status-difficulty-${props.readingStatus.difficulty || 'unmarked'}`)
 
 const triggerRenderMath = () => {
   nextTick(() => {
@@ -308,10 +308,10 @@ watch(() => props.bookTitle, triggerRenderMath)
   color: #245d39;
 }
 
-.status-difficulty-easy {
-  background: #f3f7ee;
-  border-color: #bbd2aa;
-  color: #47622b;
+.status-difficulty-unmarked {
+  background: #f6f2eb;
+  border-color: #d6caba;
+  color: #635846;
 }
 
 .status-difficulty-confused {
