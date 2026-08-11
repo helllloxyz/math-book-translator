@@ -21,6 +21,19 @@
               <option v-for="level in levelOptions" :key="level" :value="level">切至 L{{ level }}</option>
             </select>
           </label>
+          <button
+            v-if="outlineReview && levelOneGroupIds.length"
+            type="button"
+            class="outline-collapse-all"
+            :aria-label="allLevelOneGroupsCollapsed ? '展开全部 L1 目录' : '折叠全部 L1 目录'"
+            :title="allLevelOneGroupsCollapsed ? '展开全部 L1 目录' : '折叠全部 L1 目录'"
+            @click="toggleAllLevelOneGroups"
+          >
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M3 5.5h10M3 10.5h10M6 3l-2.5 2.5L6 8M10 8l2.5 2.5L10 13" />
+            </svg>
+            <span>{{ allLevelOneGroupsCollapsed ? '展开 L1' : '折叠 L1' }}</span>
+          </button>
           <button class="close-btn" @click="$emit('close')" title="Close">×</button>
         </div>
       </div>
@@ -85,9 +98,9 @@
         <div v-else-if="outlineReview" class="outline-review">
           <div class="outline-tree">
             <div
-              v-for="node in outlineRows"
+              v-for="node in visibleOutlineRows"
               :key="node.id"
-              :class="['outline-node', node.kind, { disabled: splitLevelValue(node) === '', deleted: splitLevelValue(node) === 'delete', toc: node.is_toc_like, expanded: expandedContextId === node.id }]"
+              :class="['outline-node', node.kind, { disabled: splitLevelValue(node) === '', deleted: splitLevelValue(node) === 'delete', toc: node.is_toc_like, collapsed: outlineGroupChildCounts[node.id] && collapsedLevelOneIds.has(node.id) }]"
               :style="{ '--depth': Math.max(0, outlineRowDepth(node) - 1) }"
             >
               <div class="outline-row">
@@ -102,8 +115,29 @@
                   <option value="">不切</option>
                   <option v-for="level in levelOptions" :key="level" :value="level">L{{ level }}</option>
                 </select>
-                <span class="outline-marker">{{ node.marker || node.key || '附属' }}</span>
-                <span class="outline-title" :title="node.title">{{ node.title }}</span>
+                <span class="outline-index">
+                  <span class="group-toggle-slot">
+                    <button
+                      v-if="outlineGroupChildCounts[node.id]"
+                      type="button"
+                      class="group-toggle"
+                      :class="{ collapsed: collapsedLevelOneIds.has(node.id) }"
+                      :aria-expanded="!collapsedLevelOneIds.has(node.id)"
+                      :aria-label="collapsedLevelOneIds.has(node.id) ? `展开 ${node.title} 的 ${outlineGroupChildCounts[node.id]} 个下级标题` : `收起 ${node.title} 的 ${outlineGroupChildCounts[node.id]} 个下级标题`"
+                      :title="collapsedLevelOneIds.has(node.id) ? '展开下级目录' : '收起下级目录'"
+                      @click="toggleLevelOneGroup(node.id)"
+                    >
+                      <svg viewBox="0 0 12 12" aria-hidden="true"><path d="m3 4.5 3 3 3-3" /></svg>
+                    </button>
+                  </span>
+                  <span class="outline-marker">{{ node.marker || node.key || '附属' }}</span>
+                </span>
+                <span class="outline-title-cell">
+                  <span class="outline-title" :title="node.title">{{ node.title }}</span>
+                  <span v-if="outlineGroupChildCounts[node.id] && collapsedLevelOneIds.has(node.id)" class="collapsed-count">
+                    已收起 {{ outlineGroupChildCounts[node.id] }} 项
+                  </span>
+                </span>
                 <span class="outline-meta">
                   {{ splitLevelValue(node) === 'delete' ? '删除' : splitLevelValue(node) === '' ? '不切' : `L${splitLevelValue(node)}` }}
                   · {{ node.char_count || 0 }} 字
@@ -111,41 +145,17 @@
                 <button
                   type="button"
                   class="context-toggle"
-                  :class="{ active: expandedContextId === node.id }"
                   :disabled="!node.context?.lines?.length"
-                  :aria-expanded="expandedContextId === node.id"
-                  :aria-controls="`outline-context-${node.id}`"
-                  :aria-label="expandedContextId === node.id ? `收起 ${node.title} 的上下文` : `预览 ${node.title} 的上下文`"
-                  :title="expandedContextId === node.id ? '收起上下文' : '预览上下文'"
-                  @click="toggleNodeContext(node.id)"
+                  :aria-label="`预览 ${node.title} 的上下文`"
+                  title="预览上下文"
+                  @click="openContextPreview(node)"
                 >
-                  <span>{{ expandedContextId === node.id ? '收起' : '上下文' }}</span>
+                  <span>上下文</span>
                   <svg viewBox="0 0 16 16" aria-hidden="true">
-                    <path d="m4 6 4 4 4-4" />
+                    <circle cx="7" cy="7" r="3.5" /><path d="m10 10 3 3" />
                   </svg>
                 </button>
               </div>
-              <section
-                v-if="expandedContextId === node.id && node.context?.lines?.length"
-                :id="`outline-context-${node.id}`"
-                class="outline-context"
-                :aria-label="`${node.title} 的原文上下文`"
-              >
-                <header class="context-header">
-                  <span>原文上下文</span>
-                  <span>第 {{ node.context.heading_line }} 行 · 前后各最多 {{ node.context.radius }} 行</span>
-                </header>
-                <div class="context-code">
-                  <div
-                    v-for="(line, index) in node.context.lines"
-                    :key="`${node.id}-context-${index}`"
-                    :class="['context-line', { heading: contextLineNumber(node, index) === node.context.heading_line }]"
-                  >
-                    <span class="context-line-number">{{ contextLineNumber(node, index) }}</span>
-                    <code>{{ line || ' ' }}</code>
-                  </div>
-                </div>
-              </section>
             </div>
           </div>
           <div class="preflight-actions outline-actions">
@@ -243,10 +253,56 @@
       </div>
     </div>
   </div>
+
+  <Transition name="context-preview">
+    <div
+      v-if="show && contextPreviewNode"
+      class="context-preview-overlay"
+      @click.self="closeContextPreview"
+    >
+      <section
+        ref="contextDialog"
+        class="context-preview-dialog"
+        role="dialog"
+        aria-modal="true"
+        :aria-labelledby="`context-preview-title-${contextPreviewNode.id}`"
+        tabindex="-1"
+        @keydown.esc="closeContextPreview"
+      >
+        <header class="context-preview-header">
+          <div>
+            <p class="context-preview-kicker">
+              原文上下文 · 第 {{ contextPreviewNode.context.heading_line }} 行
+            </p>
+            <h2 :id="`context-preview-title-${contextPreviewNode.id}`">
+              {{ contextPreviewNode.marker || contextPreviewNode.key }} {{ contextPreviewNode.title }}
+            </h2>
+            <p>显示标题前后各最多 {{ contextPreviewNode.context.radius }} 行，当前标题行已高亮。</p>
+          </div>
+          <button type="button" class="context-preview-close" aria-label="关闭上下文预览" @click="closeContextPreview">×</button>
+        </header>
+        <div class="context-code context-preview-code">
+          <div
+            v-for="(line, index) in contextPreviewNode.context.lines"
+            :key="`${contextPreviewNode.id}-context-${index}`"
+            :class="['context-line', { heading: contextLineNumber(contextPreviewNode, index) === contextPreviewNode.context.heading_line }]"
+          >
+            <span class="context-line-number">{{ contextLineNumber(contextPreviewNode, index) }}</span>
+            <code>{{ line || ' ' }}</code>
+          </div>
+        </div>
+      </section>
+    </div>
+  </Transition>
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
+import {
+  filterCollapsedImportOutlineRows,
+  importOutlineGroupChildCount,
+  importOutlineLevelOneGroups
+} from '../utils/importOutline.js'
 
 const props = defineProps({
   show: Boolean,
@@ -263,10 +319,36 @@ const selectedFile = ref(null)
 const selectedPackageFile = ref(null)
 const splitLevelById = ref({})
 const importDepth = ref(1)
-const expandedContextId = ref(null)
+const collapsedLevelOneIds = ref(new Set())
+const contextPreviewNodeId = ref(null)
+const contextDialog = ref(null)
+let contextPreviewTrigger = null
 
 const isBlockedPreflight = computed(() => props.preflightWarning?.severity === 'blocked')
 const outlineRows = computed(() => props.outlineReview?.nodes || [])
+const outlineGroupChildCounts = computed(() => Object.fromEntries(
+  outlineRows.value
+    .map((node, index) => [
+      node.id,
+      importOutlineGroupChildCount(outlineRows.value, index, splitLevelById.value)
+    ])
+    .filter((entry) => entry[1] > 0)
+))
+const levelOneGroupIds = computed(() => (
+  importOutlineLevelOneGroups(outlineRows.value, splitLevelById.value).map((node) => node.id)
+))
+const visibleOutlineRows = computed(() => filterCollapsedImportOutlineRows(
+  outlineRows.value,
+  collapsedLevelOneIds.value,
+  splitLevelById.value
+))
+const allLevelOneGroupsCollapsed = computed(() => (
+  levelOneGroupIds.value.length > 0
+  && levelOneGroupIds.value.every((id) => collapsedLevelOneIds.value.has(id))
+))
+const contextPreviewNode = computed(() => (
+  outlineRows.value.find((node) => node.id === contextPreviewNodeId.value) || null
+))
 const levelOptions = computed(() => {
   const maxLevel = outlineRows.value.reduce((max, node) => {
     const nodeLevel = Number(node.split_level || node.level || 1)
@@ -309,7 +391,8 @@ watch(
     }
     splitLevelById.value = nextLevels
     importDepth.value = Number(plan?.import_depth || outline?.default_import_depth || 1)
-    expandedContextId.value = null
+    collapsedLevelOneIds.value = new Set()
+    contextPreviewNodeId.value = null
   },
   { immediate: true }
 )
@@ -331,14 +414,49 @@ const outlineRowDepth = (node) => {
 }
 
 const setNodeSplitLevel = (id, value) => {
-  splitLevelById.value = {
+  const nextLevels = {
     ...splitLevelById.value,
     [id]: value === 'delete' ? 'delete' : value === '' ? null : Number(value)
   }
+  splitLevelById.value = nextLevels
+  const validGroupIds = new Set(
+    importOutlineLevelOneGroups(outlineRows.value, nextLevels).map((node) => node.id)
+  )
+  collapsedLevelOneIds.value = new Set(
+    [...collapsedLevelOneIds.value].filter((nodeId) => validGroupIds.has(nodeId))
+  )
 }
 
-const toggleNodeContext = (id) => {
-  expandedContextId.value = expandedContextId.value === id ? null : id
+const toggleLevelOneGroup = (id) => {
+  const nextCollapsedIds = new Set(collapsedLevelOneIds.value)
+  if (nextCollapsedIds.has(id)) {
+    nextCollapsedIds.delete(id)
+  } else {
+    nextCollapsedIds.add(id)
+  }
+  collapsedLevelOneIds.value = nextCollapsedIds
+}
+
+const toggleAllLevelOneGroups = () => {
+  collapsedLevelOneIds.value = allLevelOneGroupsCollapsed.value
+    ? new Set()
+    : new Set(levelOneGroupIds.value)
+}
+
+const openContextPreview = async (node) => {
+  if (!node.context?.lines?.length) return
+  contextPreviewTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null
+  contextPreviewNodeId.value = node.id
+  await nextTick()
+  contextDialog.value?.focus()
+}
+
+const closeContextPreview = async () => {
+  const trigger = contextPreviewTrigger
+  contextPreviewNodeId.value = null
+  contextPreviewTrigger = null
+  await nextTick()
+  trigger?.focus()
 }
 
 const contextLineNumber = (node, index) => Number(node.context?.start_line || 1) + index
@@ -444,6 +562,46 @@ const handlePackageImport = () => {
   align-items: center;
   gap: 0.7rem;
   flex: 0 0 auto;
+}
+
+.outline-collapse-all {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 2.1rem;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid var(--modal-line);
+  border-radius: 8px;
+  color: var(--modal-muted);
+  background: var(--color-surface-raised, #ffffff);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 650;
+  cursor: pointer;
+  transition: border-color 0.2s, color 0.2s, background 0.2s, transform 0.2s;
+}
+
+.outline-collapse-all svg {
+  width: 0.95rem;
+  height: 0.95rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.35;
+}
+
+.outline-collapse-all:hover {
+  border-color: var(--color-accent, #a74a2f);
+  color: var(--color-accent-dark, #803d2a);
+  background: var(--color-accent-soft, #f7ebe5);
+  transform: translateY(-1px);
+}
+
+.outline-collapse-all:focus-visible {
+  outline: 2px solid var(--color-accent, #a74a2f);
+  outline-offset: 2px;
 }
 
 .modal-kicker {
@@ -772,7 +930,7 @@ const handlePackageImport = () => {
 .outline-row {
   --depth: 0;
   display: grid;
-  grid-template-columns: 4.7rem minmax(3.25rem, auto) minmax(0, 1fr) auto auto;
+  grid-template-columns: 4.7rem minmax(4.5rem, auto) minmax(0, 1fr) auto auto;
   gap: 0.65rem;
   align-items: center;
   min-height: 2.85rem;
@@ -794,8 +952,63 @@ const handlePackageImport = () => {
   background: var(--color-accent-soft, #fff7ed);
 }
 
-.outline-node.expanded {
+.outline-node.collapsed {
   background: rgba(241, 236, 226, 0.6);
+}
+
+.outline-index {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  min-width: 0;
+}
+
+.group-toggle-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.15rem;
+  min-width: 1.15rem;
+}
+
+.group-toggle {
+  width: 1.15rem;
+  height: 1.15rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  color: var(--modal-muted);
+  background: transparent;
+  cursor: pointer;
+  transition: color 0.2s, background 0.2s, transform 0.2s;
+}
+
+.group-toggle:hover {
+  color: var(--color-accent-dark, #803d2a);
+  background: var(--color-accent-soft, #f7ebe5);
+}
+
+.group-toggle:focus-visible {
+  outline: 2px solid var(--color-accent, #a74a2f);
+  outline-offset: 1px;
+}
+
+.group-toggle svg {
+  width: 0.72rem;
+  height: 0.72rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+  transition: transform 0.2s;
+}
+
+.group-toggle.collapsed svg {
+  transform: rotate(-90deg);
 }
 
 .outline-marker {
@@ -813,6 +1026,25 @@ const handlePackageImport = () => {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-weight: 550;
+}
+
+.outline-title-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.collapsed-count {
+  flex: 0 0 auto;
+  padding: 0.18rem 0.35rem;
+  border-radius: 4px;
+  color: var(--color-accent-dark, #803d2a);
+  background: var(--color-accent-soft, #f7ebe5);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.62rem;
+  font-weight: 650;
+  white-space: nowrap;
 }
 
 .outline-meta {
@@ -850,8 +1082,7 @@ const handlePackageImport = () => {
   transition: transform 0.2s;
 }
 
-.context-toggle:hover:not(:disabled),
-.context-toggle.active {
+.context-toggle:hover:not(:disabled) {
   border-color: var(--color-accent, #a74a2f);
   background: var(--color-accent-soft, #f7ebe5);
   color: var(--color-accent-dark, #803d2a);
@@ -859,10 +1090,6 @@ const handlePackageImport = () => {
 
 .context-toggle:hover:not(:disabled) {
   transform: translateY(-1px);
-}
-
-.context-toggle.active svg {
-  transform: rotate(180deg);
 }
 
 .context-toggle:focus-visible {
@@ -875,30 +1102,129 @@ const handlePackageImport = () => {
   opacity: 0.45;
 }
 
-.outline-context {
-  margin: 0 0.65rem 0.65rem calc(0.65rem + var(--depth) * 1.15rem);
-  overflow: hidden;
-  border: 1px solid rgba(255, 250, 242, 0.12);
-  border-radius: 9px;
-  background: #24201c;
-  box-shadow: 0 10px 22px rgba(64, 45, 32, 0.12);
+.context-preview-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: rgba(35, 29, 23, 0.56);
+  backdrop-filter: blur(12px) saturate(0.75);
 }
 
-.context-header {
+.context-preview-dialog {
+  width: min(780px, calc(100vw - 2rem));
+  max-height: min(760px, calc(100dvh - 2rem));
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  border: 1px solid rgba(255, 250, 242, 0.16);
+  border-radius: 16px;
+  color: #e7dfd4;
+  background: #24201c;
+  box-shadow: 0 32px 84px rgba(35, 25, 18, 0.38);
+}
+
+.context-preview-dialog:focus {
+  outline: none;
+}
+
+.context-preview-header {
   display: flex;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
-  padding: 0.55rem 0.75rem;
+  padding: 1rem 1.1rem 0.9rem;
   border-bottom: 1px solid rgba(255, 250, 242, 0.12);
-  color: #f1ece4;
-  font-size: 0.72rem;
-  font-weight: 700;
+  background: #2a2521;
 }
 
-.context-header span:last-child {
+.context-preview-kicker {
+  margin: 0 0 0.3rem;
+  color: #c58a73;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.64rem;
+  font-weight: 650;
+  letter-spacing: 0.07em;
+}
+
+.context-preview-header h2 {
+  margin: 0;
+  color: #fffaf2;
+  font-family: var(--font-display, serif);
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.context-preview-header p:last-child {
+  margin: 0.3rem 0 0;
   color: #a99f94;
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.context-preview-close {
+  width: 2rem;
+  height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 1px solid rgba(255, 250, 242, 0.16);
+  border-radius: 8px;
+  color: #c7bdb3;
+  background: rgba(255, 250, 242, 0.04);
+  font: inherit;
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+
+.context-preview-close:hover {
+  border-color: rgba(228, 165, 143, 0.55);
+  color: #fffaf2;
+  background: rgba(184, 94, 65, 0.18);
+}
+
+.context-preview-close:focus-visible {
+  outline: 2px solid #c58a73;
+  outline-offset: 2px;
+}
+
+.context-preview-enter-active,
+.context-preview-leave-active {
+  transition: opacity 0.18s ease;
+}
+
+.context-preview-enter-active .context-preview-dialog,
+.context-preview-leave-active .context-preview-dialog {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.context-preview-enter-from,
+.context-preview-leave-to,
+.context-preview-enter-from .context-preview-dialog,
+.context-preview-leave-to .context-preview-dialog {
+  opacity: 0;
+}
+
+.context-preview-enter-from .context-preview-dialog,
+.context-preview-leave-to .context-preview-dialog {
+  transform: translateY(8px) scale(0.985);
+}
+
+.context-preview-code {
+  max-height: none;
+  min-height: 0;
+  padding-block: 0.7rem;
+}
+
+.context-preview-code {
   font-variant-numeric: tabular-nums;
-  font-weight: 500;
 }
 
 .context-code {
@@ -1081,7 +1407,7 @@ const handlePackageImport = () => {
   }
 
   .outline-row {
-    grid-template-columns: 4.4rem minmax(2.5rem, auto) minmax(0, 1fr) auto;
+    grid-template-columns: 4.4rem minmax(3.8rem, auto) minmax(0, 1fr) auto;
   }
 
   .modal-header.outline-header {
@@ -1101,7 +1427,12 @@ const handlePackageImport = () => {
     overflow: hidden;
     white-space: normal;
     -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
+    -webkit-line-clamp: 1;
+  }
+
+  .outline-header h2 {
+    font-size: 1.08rem;
+    white-space: nowrap;
   }
 
   .modal-header-actions {
@@ -1118,6 +1449,15 @@ const handlePackageImport = () => {
     display: none;
   }
 
+  .outline-collapse-all {
+    width: 2.1rem;
+    padding: 0;
+  }
+
+  .outline-collapse-all span {
+    display: none;
+  }
+
   .context-toggle span {
     display: none;
   }
@@ -1127,14 +1467,22 @@ const handlePackageImport = () => {
     padding: 0;
   }
 
-  .outline-context {
-    margin-left: 0.65rem;
+  .collapsed-count {
+    display: none;
   }
 
-  .context-header {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 0.2rem;
+  .context-preview-overlay {
+    padding: 0.75rem;
+  }
+
+  .context-preview-dialog {
+    width: 100%;
+    max-height: calc(100dvh - 1.5rem);
+    border-radius: 13px;
+  }
+
+  .context-preview-header {
+    padding: 0.85rem;
   }
 
   .outline-actions .secondary-btn,
