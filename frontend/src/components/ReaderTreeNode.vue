@@ -8,7 +8,11 @@
       :style="{ paddingLeft: `${depth * 0.85 + 0.35}rem` }"
       @click="expanded = !expanded"
     >
-      <span class="disclosure">{{ expanded ? 'v' : '>' }}</span>
+      <span class="disclosure" :class="{ expanded }" aria-hidden="true">
+        <svg viewBox="0 0 12 12" focusable="false">
+          <path d="M4.7 10c-.2 0-.4-.1-.5-.2-.3-.3-.3-.8 0-1.1L6.9 6 4.2 3.3c-.3-.3-.3-.8 0-1.1.3-.3.8-.3 1.1 0l3.3 3.2c.3.3.3.8 0 1.1L5.3 9.7c-.2.2-.4.3-.6.3Z" />
+        </svg>
+      </span>
       <span ref="titleRef" class="item-title" v-html="renderedDisplayTitle"></span>
     </button>
 
@@ -157,6 +161,10 @@ watch(isCurrentItem, async (isCurrent) => {
   color: #5a4d3d;
 }
 
+.directory-row:hover .disclosure {
+  color: #5f4e39;
+}
+
 .leaf-row:hover,
 .directory-row:hover {
   background: rgba(255, 255, 255, 0.78);
@@ -173,11 +181,23 @@ watch(isCurrentItem, async (isCurrent) => {
 .disclosure {
   flex: 0 0 1rem;
   color: #8b7962;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 1.1rem;
-  font-weight: 700;
-  line-height: 1;
-  text-align: center;
+  display: grid;
+  width: 1rem;
+  height: 1rem;
+  place-items: center;
+  transition: color 160ms ease;
+}
+
+.disclosure svg {
+  width: 0.75rem;
+  height: 0.75rem;
+  fill: currentColor;
+  transform-origin: center;
+  transition: transform 180ms cubic-bezier(0.2, 0.75, 0.25, 1);
+}
+
+.disclosure.expanded svg {
+  transform: rotate(90deg);
 }
 
 .leaf-marker {
@@ -192,5 +212,11 @@ watch(isCurrentItem, async (isCurrent) => {
   min-width: 0;
   line-height: 1.35;
   overflow-wrap: anywhere;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .disclosure svg {
+    transition: none;
+  }
 }
 </style>
