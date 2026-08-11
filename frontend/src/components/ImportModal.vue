@@ -1216,13 +1216,10 @@ const handlePackageImport = () => {
   transform: translateY(8px) scale(0.985);
 }
 
-.context-preview-code {
+.context-code.context-preview-code {
   max-height: none;
   min-height: 0;
   padding-block: 0.7rem;
-}
-
-.context-preview-code {
   font-variant-numeric: tabular-nums;
 }
 

@@ -24,6 +24,7 @@ assert.match(source, />删除</, 'ImportModal should let users delete headings f
 assert.match(source, /deleted_heading_ids/, 'ImportModal should send deleted heading ids in the outline plan')
 assert.match(source, /预览上下文/, 'ImportModal should let users preview the source around each heading')
 assert.match(source, /context-preview-dialog/, 'ImportModal should open source context in a focused dialog')
+assert.match(source, /\.context-code\.context-preview-code\s*\{[\s\S]*?max-height:\s*none/, 'Context preview text should fill the available dialog height instead of inheriting the compact inline preview limit')
 assert.match(source, /openContextPreview/, 'ImportModal should open context from a dedicated button')
 assert.match(source, /closeContextPreview/, 'ImportModal should close context and restore focus')
 assert.doesNotMatch(source, /<span>上下文<\/span>/, 'ImportModal should keep the context action icon-only')
