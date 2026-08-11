@@ -65,6 +65,42 @@ def test_analyze_outline_marks_spaced_dot_leader_entries_as_toc_like():
     assert outline["default_import_depth"] == 1
 
 
+def test_analyze_outline_includes_fifteen_lines_of_context_around_each_heading():
+    text = "\n".join(
+        [f"Before {index}" for index in range(1, 21)]
+        + ["# 1 Context Heading"]
+        + [f"After {index}" for index in range(1, 21)]
+    )
+
+    node = MarkdownSplitter().analyze_outline(text)["nodes"][0]
+    context = node["context"]
+
+    assert context["radius"] == 15
+    assert context["start_line"] == 6
+    assert context["heading_line"] == 21
+    assert context["end_line"] == 36
+    assert len(context["lines"]) == 31
+    assert context["lines"][0] == "Before 6"
+    assert context["lines"][15] == "# 1 Context Heading"
+    assert context["lines"][-1] == "After 15"
+
+
+def test_analyze_outline_context_stops_at_document_boundaries_and_truncates_long_lines():
+    long_line = "x" * 520
+    nodes = MarkdownSplitter().analyze_outline(f"# 1 Start\n{long_line}\n# 2 End")["nodes"]
+
+    first_context = nodes[0]["context"]
+    last_context = nodes[-1]["context"]
+
+    assert first_context["start_line"] == 1
+    assert first_context["end_line"] == 3
+    assert len(first_context["lines"][1]) == 501
+    assert first_context["lines"][1].endswith("…")
+    assert last_context["start_line"] == 1
+    assert last_context["heading_line"] == 3
+    assert last_context["end_line"] == 3
+
+
 def test_splitter_accepts_short_nonspace_marker_after_numbered_heading_index():
     text = "\n".join(
         [

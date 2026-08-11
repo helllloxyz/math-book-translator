@@ -2054,7 +2054,6 @@
 
 #app .chapter-type-summary,
 #app .chapter-preview,
-#app .outline-review,
 #app .package-section {
   border-color: var(--color-line);
   border-radius: var(--radius-md);
@@ -2082,11 +2081,11 @@
   background: var(--color-surface);
 }
 
-#app .outline-row {
+#app .outline-node {
   border-color: var(--color-line);
 }
 
-#app .outline-row:hover {
+#app .outline-node:not(.expanded):hover {
   background: var(--color-accent-soft);
 }
 

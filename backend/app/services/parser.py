@@ -44,6 +44,26 @@ class MarkdownSplitter:
     REGEX_PATTERN = r"^#+\s+(\d+(?:\.\d+)*)\s+(.*)"
     HEADING_PATTERN = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
     LEADER_PAGE_PATTERN = re.compile(r"\s*(?:\.{3,}|(?:\.\s*){3,})\s*\d+\s*$")
+    OUTLINE_CONTEXT_RADIUS = 15
+    OUTLINE_CONTEXT_LINE_CHARS = 500
+
+    @classmethod
+    def _build_heading_context(cls, lines: list[str], heading_index: int) -> dict:
+        start_index = max(0, heading_index - cls.OUTLINE_CONTEXT_RADIUS)
+        end_index = min(len(lines), heading_index + cls.OUTLINE_CONTEXT_RADIUS + 1)
+        preview_lines = []
+        for line in lines[start_index:end_index]:
+            if len(line) > cls.OUTLINE_CONTEXT_LINE_CHARS:
+                preview_lines.append(f"{line[:cls.OUTLINE_CONTEXT_LINE_CHARS]}…")
+            else:
+                preview_lines.append(line)
+        return {
+            "start_line": start_index + 1,
+            "heading_line": heading_index + 1,
+            "end_line": end_index,
+            "radius": cls.OUTLINE_CONTEXT_RADIUS,
+            "lines": preview_lines,
+        }
 
     @staticmethod
     def _clean_heading_title(raw_title: str) -> str:
@@ -285,6 +305,7 @@ class MarkdownSplitter:
                         "enabled": split_level is not None,
                         "is_toc_like": is_toc_like,
                         "auto_demoted": auto_demoted,
+                        "context": self._build_heading_context(lines, index),
                     }
                 )
                 if split_level is not None:
@@ -323,6 +344,7 @@ class MarkdownSplitter:
                     "enabled": split_level is not None,
                     "is_toc_like": is_toc_like,
                     "auto_demoted": False,
+                    "context": self._build_heading_context(lines, index),
                 }
             )
             if is_attachment and parent_key:
