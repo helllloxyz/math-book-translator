@@ -28,14 +28,10 @@ assert.match(component, /class="dialog-content"/, 'dialog should keep messages a
 assert.match(component, /class="dialog-context-sidebar"/, 'embedded dialog mode should still support the left context sidebar')
 assert.match(component, /class="delete-conversation-button"/, 'left context sidebar should include a delete button')
 assert.match(component, /emit\('delete', card\)/, 'delete button should emit the active card')
-assert.match(component, /class="question-block latex-content question-context-details"/, 'selected context should render as a collapsible question block')
-assert.match(
-  component,
-  /<section ref="messagesRef"[\s\S]*?<details[\s\S]*?v-if="isSelectionNote && selectedText"[\s\S]*?<p v-if="showEmptyMessage"/,
-  'question context should render before the empty conversation state'
-)
-assert.match(component, /<summary>Question context<\/summary>/, 'question context should be collapsible')
-assert.match(component, /class="question-context-content" v-html="renderMessage\(selectedText\)"/, 'question context should pass selected Markdown through the KaTeX-capable renderer')
+assert.match(component, /v-if="isSelectionNote && selectedText"/, 'selection questions should show their selected context above the conversation')
+assert.match(component, /<summary>Selected context<\/summary>/, 'selected context should stay identifiable and collapsible')
+assert.match(component, /class="question-context-content" v-html="renderMessage\(selectedText\)"/, 'selected context should preserve Markdown and math rendering')
+assert.doesNotMatch(component, /isChapterNote && selectedText/, 'chapter questions should not render the full chapter above the conversation')
 assert.doesNotMatch(component, /Type your answer to start this quiz dialogue\./, 'quiz dialogues should not show the old empty prompt scaffold')
 assert.match(component, /showEmptyMessage/, 'empty state visibility should be explicit so quiz can suppress the scaffold')
 assert.doesNotMatch(component, /v-if="standalone && isQuiz" class="quiz-context standalone-context-card"/, 'standalone quiz conversations should not render the old quiz context card above the dialogue')
@@ -70,8 +66,13 @@ assert.match(
   /if \(!prompt \|\| props\.card\?\.loading\) return\s+draft\.value = ''\s+emit\('send'/,
   'accepted prompts should clear the composer before the send handler can trigger a loading render'
 )
-assert.match(component, /props\.card\?\.initialPrompt/, 'a selected passage should be able to prefill the question composer')
-assert.match(component, /messages\.value\.length \? '' : String\(props\.card\?\.initialPrompt \|\| ''\)/, 'prefill should only apply to a new conversation, not overwrite a saved follow-up')
+assert.match(component, /props\.card\?\.initialPrompt/, 'whole-chapter questions may still use an explicit initial prompt')
+assert.match(component, /ref="composerRef"/, 'the composer textarea should expose its rendered height for auto-sizing')
+assert.match(component, /composer\.style\.height = 'auto'[\s\S]*?composer\.scrollHeight/, 'the composer should grow with its wrapped line count')
+assert.match(component, /const COMPOSER_MAX_LINES = 12/, 'the composer should show up to twelve lines before scrolling')
+assert.match(component, /lineHeight \* COMPOSER_MAX_LINES \+ verticalPadding \+ verticalBorder/, 'the twelve-line cap should account for the active font and textarea chrome')
+assert.match(component, /watch\(draft, resizeComposer/, 'typing and clearing should both resize the composer')
+assert.match(component, /resize:\s*none;/, 'auto-sized composer should not require manual resize handles')
 assert.match(component, /min-height:\s*calc\(2em \+ 16px\)/, 'input textarea should default to two lines of text height')
 assert.match(component, /\.conversation-dialog\s*\{[\s\S]*?flex-direction:\s*row;/, 'embedded dialog left sidebar should span the full dialog height')
 assert.match(component, /width:\s*min\(860px,\s*calc\(100vw - 2rem\)\)/, 'dialog should be wider when the left sidebar is visible')

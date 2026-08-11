@@ -50,6 +50,7 @@ assert.equal(selectionNote.questionSummary, 'New selection note')
 assert.equal(selectionNote.sourceTitle, '21.5 Orientations and Atlases')
 assert.equal(selectionNote.selectedText, 'det(∂yʲ / ∂xⁱ) > 0')
 assert.equal(selectionNote.contextScope, 'selection', 'selection-only notes should limit prompt context to the selection')
+assert.equal(selectionNote.initialPrompt, '', 'selection context should not be duplicated into the question composer')
 
 const chapterNoteFromSelection = createChapterCard(chapter, { initialPrompt: 'What does this orientation condition mean?' })
 assert.equal(chapterNoteFromSelection.initialPrompt, 'What does this orientation condition mean?', 'chapter notes opened from a selection should prefill the composer without narrowing chapter context')

@@ -119,7 +119,7 @@
               class="question-block latex-content question-context-details"
               open
             >
-              <summary>Question context</summary>
+              <summary>Selected context</summary>
               <div class="question-context-content" v-html="renderMessage(selectedText)"></div>
             </details>
             <p v-if="showEmptyMessage" class="empty-message">{{ emptyMessage }}</p>
@@ -216,6 +216,7 @@
             </div>
             <div class="input-row">
               <textarea
+                ref="composerRef"
                 v-model="draft"
                 :placeholder="placeholder"
                 :disabled="card.loading || quizQuestionUnavailable"
@@ -261,6 +262,8 @@ const DEFAULT_RESPONSE_STYLES = [
   }
 ]
 
+const COMPOSER_MAX_LINES = 12
+
 const props = defineProps({
   mode: {
     type: String,
@@ -286,6 +289,7 @@ const emit = defineEmits(['close', 'send', 'regenerate', 'select-question', 'go-
 const draft = ref('')
 const dialogRef = ref(null)
 const messagesRef = ref(null)
+const composerRef = ref(null)
 const responseStyles = ref(DEFAULT_RESPONSE_STYLES)
 const selectedResponseStyleId = ref('')
 
@@ -432,6 +436,24 @@ const syncMessageScroll = () => {
   })
 }
 
+const resizeComposer = () => {
+  nextTick(() => {
+    const composer = composerRef.value
+    if (!composer) return
+    const styles = window.getComputedStyle(composer)
+    const lineHeight = Number.parseFloat(styles.lineHeight)
+      || Number.parseFloat(styles.fontSize) * 1.4
+    const verticalPadding = Number.parseFloat(styles.paddingTop) + Number.parseFloat(styles.paddingBottom)
+    const verticalBorder = Number.parseFloat(styles.borderTopWidth) + Number.parseFloat(styles.borderBottomWidth)
+    const maxHeight = lineHeight * COMPOSER_MAX_LINES + verticalPadding + verticalBorder
+    composer.style.height = 'auto'
+    const naturalHeight = composer.scrollHeight + verticalBorder
+    composer.style.maxHeight = `${maxHeight}px`
+    composer.style.height = `${Math.min(naturalHeight, maxHeight)}px`
+    composer.style.overflowY = naturalHeight > maxHeight ? 'auto' : 'hidden'
+  })
+}
+
 const handleLatexCopy = (event) => {
   copySelectionAsLatex(event, dialogRef.value)
 }
@@ -480,6 +502,7 @@ watch(() => props.card?.id, () => {
 watch(() => props.card?.noteContent, syncMessageScroll)
 watch(() => props.card?.note_content, syncMessageScroll)
 watch(() => props.card?.messages, syncMessageScroll, { deep: true })
+watch(draft, resizeComposer, { flush: 'post' })
 
 onMounted(() => {
   resetDraft()
@@ -1457,8 +1480,9 @@ onUnmounted(() => {
   min-width: 0;
   min-height: calc(2em + 16px);
   height: calc(2em + 16px);
-  max-height: 6.5rem;
-  resize: vertical;
+  max-height: 18rem;
+  overflow-y: hidden;
+  resize: none;
   border: 0.5px solid var(--dialog-border);
   border-radius: 8px;
   background: var(--dialog-bg-secondary);
@@ -1471,7 +1495,7 @@ onUnmounted(() => {
 
 .conversation-dialog.standalone .dialog-input textarea {
   min-height: 58px;
-  height: 58px;
+  height: auto;
   border-color: rgba(102, 84, 66, 0.18);
   border-radius: 18px;
   background: rgba(255, 253, 249, 0.94);

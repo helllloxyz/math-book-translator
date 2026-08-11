@@ -270,7 +270,7 @@ export function useLearningCards() {
         return card
     }
 
-    const ensureSelectionCard = (chapter, selectedText, options = {}) => {
+    const ensureSelectionCard = (chapter, selectedText) => {
         const normalizedText = selectedText.trim()
         const existing = askCards.value.find(card => (
             card.type === 'selection' &&
@@ -278,9 +278,6 @@ export function useLearningCards() {
             card.selectedText === normalizedText
         ))
         if (existing) {
-            if (!existing.messages.length && options.initialPrompt) {
-                existing.initialPrompt = options.initialPrompt
-            }
             return existing
         }
         const card = toAskCard({
@@ -290,7 +287,7 @@ export function useLearningCards() {
             note_content: '',
             title: 'New selection note',
             contextScope: 'selection',
-            initialPrompt: options.initialPrompt || '',
+            initialPrompt: '',
             source_type: chapter.sourceType || chapter.source_type,
             source_id: chapter.sourceId || chapter.source_id,
             source_title: subjectTitle(chapter)

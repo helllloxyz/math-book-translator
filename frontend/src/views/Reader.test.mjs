@@ -45,6 +45,8 @@ assert.match(source, /content_translated/, 'chapter note context should prefer t
 assert.match(source, /return body/, 'chapter chat should send the complete imported chapter body')
 assert.doesNotMatch(source, /compactChapterBody/, 'chapter chat should not apply a second context-length limit')
 assert.match(source, /action === 'chapter-note'[\s\S]*?createChapterCard/, 'selected text can seed a whole-chapter question without shrinking the context')
+assert.match(source, /ensureSelectionCard\(currentToolSubject\.value, text\)/, 'selection questions should keep selected text as context without prefilling the composer')
+assert.doesNotMatch(source, /ensureSelectionCard\(currentToolSubject\.value, text, \{ initialPrompt: text \}\)/, 'selection questions should not duplicate selected text in the composer')
 assert.match(source, /@go-next="goToNextReaderItem"/, 'next-page navigation should run the reading completion check')
 assert.match(source, /readingPercent\.value >= 100[\s\S]*?progress: 'finished'[\s\S]*?goToReaderItem\(nextReaderItem\.value\)/, 'a fully read chapter should be marked finished before opening the next item')
 assert.match(source, /source-note-highlight--selection[\s\S]*?var\(--color-selection-soft\)/, 'saved selection highlights should use the same calm blue selection palette')

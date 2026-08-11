@@ -465,7 +465,7 @@ const openSelectionChat = async (action, text) => {
 
   const card = action === 'chapter-note'
     ? createChapterCard(currentToolSubject.value, { initialPrompt: text })
-    : ensureSelectionCard(currentToolSubject.value, text, { initialPrompt: text })
+    : ensureSelectionCard(currentToolSubject.value, text)
   await activateNoteCard(card)
 }
 
