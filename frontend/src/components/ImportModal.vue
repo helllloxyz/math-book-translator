@@ -139,8 +139,7 @@
                   </span>
                 </span>
                 <span class="outline-meta">
-                  {{ splitLevelValue(node) === 'delete' ? '删除' : splitLevelValue(node) === '' ? '不切' : `L${splitLevelValue(node)}` }}
-                  · {{ node.char_count || 0 }} 字
+                  {{ node.char_count || 0 }} 字
                 </span>
                 <button
                   type="button"
@@ -150,7 +149,6 @@
                   title="预览上下文"
                   @click="openContextPreview(node)"
                 >
-                  <span>上下文</span>
                   <svg viewBox="0 0 16 16" aria-hidden="true">
                     <circle cx="7" cy="7" r="3.5" /><path d="m10 10 3 3" />
                   </svg>
@@ -1059,9 +1057,9 @@ const handlePackageImport = () => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.3rem;
+  width: 1.95rem;
   min-height: 1.95rem;
-  padding: 0.3rem 0.48rem;
+  padding: 0;
   border: 1px solid var(--modal-line);
   border-radius: 8px;
   background: var(--color-surface-raised, #ffffff);
@@ -1116,7 +1114,8 @@ const handlePackageImport = () => {
 
 .context-preview-dialog {
   width: min(780px, calc(100vw - 2rem));
-  max-height: min(760px, calc(100dvh - 2rem));
+  height: min(820px, calc(100dvh - 2rem));
+  max-height: calc(100dvh - 2rem);
   overflow: hidden;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
@@ -1455,10 +1454,6 @@ const handlePackageImport = () => {
   }
 
   .outline-collapse-all span {
-    display: none;
-  }
-
-  .context-toggle span {
     display: none;
   }
 
