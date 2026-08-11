@@ -65,9 +65,33 @@ def test_book_tree_sorts_mixed_missing_parent_indexes_without_type_error():
 
     tree = ReaderTreeService.build_book_tree(chapters)
 
-    assert titles(tree) == ["1", "A"]
-    assert titles(tree[0]["children"]) == ["numeric child"]
-    assert titles(tree[1]["children"]) == ["appendix child"]
+    assert titles(tree) == ["A", "1"]
+    assert titles(tree[0]["children"]) == ["appendix child"]
+    assert titles(tree[1]["children"]) == ["numeric child"]
+
+
+def test_book_tree_merges_real_and_synthetic_roots_in_source_order():
+    chapters = [
+        Chapter(25, "1.1", "first child", 1),
+        Chapter(26, "2", "later root", 2),
+    ]
+
+    tree = ReaderTreeService.build_book_tree(chapters)
+
+    assert titles(tree) == ["1", "later root"]
+
+
+def test_book_tree_preserves_source_order_and_hides_source_line_fallback_labels():
+    chapters = [
+        Chapter(31, "line-511", "定量规则", 2),
+        Chapter(30, "line-5", "合情推理", 1),
+        Chapter(32, "line-1432", "初等抽样论", 3),
+    ]
+
+    tree = ReaderTreeService.build_book_tree(chapters)
+
+    assert titles(tree) == ["合情推理", "定量规则", "初等抽样论"]
+    assert [node["label"] for node in tree] == ["", "", ""]
 
 
 def test_guide_tree_omits_empty_directories_when_no_guides_exist():

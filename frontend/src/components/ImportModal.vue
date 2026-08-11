@@ -72,7 +72,11 @@
               class="chapter-preview-row"
             >
               <span class="chapter-title">
-                {{ chapter.chapter_index }} {{ chapter.title }}
+                <span class="chapter-position">{{ chapter.position }}</span>
+                <span class="chapter-title-copy">
+                  <span>{{ chapter.display_index ? `${chapter.display_index} ` : '' }}{{ chapter.title }}</span>
+                  <small v-if="chapter.source_line">未识别编号 · 原文第 {{ chapter.source_line }} 行</small>
+                </span>
               </span>
               <span :class="['chapter-type', { exercise: chapter.content_type === 'exercise' }]">
                 {{ chapter.content_type_label || chapter.content_type }}
@@ -1334,10 +1338,36 @@ const handlePackageImport = () => {
 
 .chapter-title {
   min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  color: #374151;
+}
+
+.chapter-position {
+  flex: 0 0 1.75rem;
+  color: #94a3b8;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.chapter-title-copy {
+  min-width: 0;
+  display: grid;
+  gap: 0.1rem;
+}
+
+.chapter-title-copy > span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #374151;
+}
+
+.chapter-title-copy small {
+  color: #94a3b8;
+  font-size: 0.7rem;
 }
 
 .chapter-type {

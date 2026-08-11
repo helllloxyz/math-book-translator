@@ -31,11 +31,19 @@ MATH_ENVIRONMENT_TITLES = {
 
 
 class HeadingToken:
-    def __init__(self, marker: str, key: str, title: str, raw_marker: str | None = None):
+    def __init__(
+        self,
+        marker: str,
+        key: str,
+        title: str,
+        raw_marker: str | None = None,
+        structural_unit: str | None = None,
+    ):
         self.marker = marker
         self.key = key
         self.title = title
         self.raw_marker = raw_marker or marker
+        self.structural_unit = structural_unit
 
 class MarkdownSplitter:
     # Allow for multiple # characters for nested headers (standard markdown)
@@ -46,6 +54,21 @@ class MarkdownSplitter:
     LEADER_PAGE_PATTERN = re.compile(r"\s*(?:\.{3,}|(?:\.\s*){3,})\s*\d+\s*$")
     OUTLINE_CONTEXT_RADIUS = 15
     OUTLINE_CONTEXT_LINE_CHARS = 500
+    CHINESE_DIGITS = {
+        "零": 0,
+        "〇": 0,
+        "一": 1,
+        "二": 2,
+        "两": 2,
+        "三": 3,
+        "四": 4,
+        "五": 5,
+        "六": 6,
+        "七": 7,
+        "八": 8,
+        "九": 9,
+    }
+    CHINESE_SMALL_UNITS = {"十": 10, "百": 100, "千": 1000}
 
     @classmethod
     def _build_heading_context(cls, lines: list[str], heading_index: int) -> dict:
@@ -80,11 +103,54 @@ class MarkdownSplitter:
     @staticmethod
     def _split_marker_title(title: str, marker: str) -> str:
         remainder = title[len(marker):].strip()
-        return re.sub(r"^[\s:.)、\-–—]+", "", remainder).strip() or title.strip()
+        return re.sub(r"^[\s:：.)、\-–—]+", "", remainder).strip() or title.strip()
+
+    @classmethod
+    def _parse_chinese_integer(cls, raw_value: str) -> int | None:
+        value = re.sub(r"\s+", "", raw_value)
+        if not value or any(
+            char not in cls.CHINESE_DIGITS and char not in cls.CHINESE_SMALL_UNITS
+            for char in value
+        ):
+            return None
+        if all(char in cls.CHINESE_DIGITS for char in value):
+            return int("".join(str(cls.CHINESE_DIGITS[char]) for char in value))
+
+        total = 0
+        current_digit = 0
+        for char in value:
+            if char in cls.CHINESE_DIGITS:
+                current_digit = cls.CHINESE_DIGITS[char]
+                continue
+            unit = cls.CHINESE_SMALL_UNITS[char]
+            total += (current_digit or 1) * unit
+            current_digit = 0
+        return total + current_digit
 
     @staticmethod
     def _extract_heading_token(raw_title: str) -> HeadingToken | None:
         title = MarkdownSplitter._clean_heading_title(raw_title)
+        chinese_match = re.match(
+            r"^(?P<marker>第\s*(?P<key>[0-9]+(?:\s*\.\s*[0-9]+)*|[零〇一二两三四五六七八九十百千]+)\s*(?P<unit>章|节))",
+            title,
+        )
+        if chinese_match:
+            raw_key = chinese_match.group("key")
+            if re.search(r"\d", raw_key):
+                key = MarkdownSplitter._normalize_key(raw_key)
+            else:
+                parsed_key = MarkdownSplitter._parse_chinese_integer(raw_key)
+                key = str(parsed_key) if parsed_key is not None else ""
+            if key:
+                raw_marker = chinese_match.group("marker")
+                return HeadingToken(
+                    marker=raw_marker,
+                    key=key,
+                    title=MarkdownSplitter._split_marker_title(title, raw_marker),
+                    raw_marker=raw_marker,
+                    structural_unit=chinese_match.group("unit"),
+                )
+
         marker_suffix = r"(?:\S{2,3})?"
         patterns = (
             rf"^(?P<marker>§\s*(?P<key>[0-9]+(?:\.[0-9]+)*|[A-Za-z](?:\.[0-9]+)*){marker_suffix})(?!\.\d)(?=$|[\s:.)、\-–—])",
@@ -277,6 +343,10 @@ class MarkdownSplitter:
             is_toc_like = self._is_toc_like(raw_title)
 
             if token:
+                if token.structural_unit == "节" and self._node_level(token.key) == 1:
+                    parent = self._attachment_parent_node(nodes)
+                    if parent and parent.get("key"):
+                        token.key = f"{parent['key']}.{token.key}"
                 base_level = self._node_level(token.key)
                 root_key = token.key.split(".", 1)[0]
                 duplicate_demote = token.key in seen_numbered_keys
@@ -305,6 +375,7 @@ class MarkdownSplitter:
                         "enabled": split_level is not None,
                         "is_toc_like": is_toc_like,
                         "auto_demoted": auto_demoted,
+                        "structural_unit": token.structural_unit,
                         "context": self._build_heading_context(lines, index),
                     }
                 )

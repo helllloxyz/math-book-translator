@@ -21,6 +21,63 @@ def test_splitter_labels_unmatched_document_as_import_prefix():
     ]
 
 
+def test_splitter_recognizes_chinese_chapter_markers_and_preserves_source_order():
+    text = "\n".join(
+        [
+            "封面",
+            "# 第1章 合情推理",
+            "第一章正文",
+            "# 第二章 定量规则",
+            "第二章正文",
+            "# 第3章 初等抽样论",
+            "第三章正文",
+            "# 第四章 初等假设检验",
+            "第四章正文",
+            "# 第5章 概率论的怪异应用",
+            "第五章正文",
+        ]
+    )
+
+    splitter = MarkdownSplitter()
+    outline = splitter.analyze_outline(text)
+    chunks = splitter.split_text(text, outline_plan=outline["default_outline_plan"])
+
+    assert [node["marker"] for node in outline["nodes"]] == [
+        "第1章",
+        "第二章",
+        "第3章",
+        "第四章",
+        "第5章",
+    ]
+    assert [node["key"] for node in outline["nodes"]] == ["1", "2", "3", "4", "5"]
+    assert [node["title"] for node in outline["nodes"]] == [
+        "合情推理",
+        "定量规则",
+        "初等抽样论",
+        "初等假设检验",
+        "概率论的怪异应用",
+    ]
+    assert [chunk["chapter_index"] for chunk in chunks] == ["0", "1", "2", "3", "4", "5"]
+
+
+def test_splitter_nests_single_number_chinese_sections_under_latest_chapter():
+    text = "\n".join(
+        [
+            "# 第2章 定量规则",
+            "章正文",
+            "# 第1节 基本规则",
+            "节正文",
+            "# 第2节 进阶规则",
+            "节正文",
+        ]
+    )
+
+    outline = MarkdownSplitter().analyze_outline(text)
+
+    assert [node["key"] for node in outline["nodes"]] == ["2", "2.1", "2.2"]
+    assert [node["split_level"] for node in outline["nodes"]] == [1, 2, 2]
+
+
 def test_analyze_outline_groups_section_and_appendix_numbering():
     text = "\n".join(
         [

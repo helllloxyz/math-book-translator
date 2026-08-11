@@ -5,6 +5,7 @@ from fastapi import HTTPException
 
 from app.services.book_service import BookService, MAX_CHAPTER_CHARS, MIN_CHAPTER_WARNING_CHARS
 from app.services.parser import MarkdownSplitter
+from app.services.prompts import PromptId, PromptRegistry
 
 
 class FakeSession:
@@ -229,6 +230,32 @@ def test_import_preflight_local_checks_group_major_split_issues():
     assert preflight["issues"][1]["examples"] == ["5 -> 0"]
 
 
+def test_import_preflight_ignores_source_line_fallbacks_when_checking_semantic_order():
+    chunks = [
+        {"chapter_index": "0", "title": "导入前置内容", "content": "x" * 40},
+        {"chapter_index": "line-5", "title": "合情推理", "content": "x" * 500},
+        {"chapter_index": "line-511", "title": "定量规则", "content": "x" * 500},
+        {"chapter_index": "line-1432", "title": "初等抽样论", "content": "x" * 500},
+        {"chapter_index": "line-2538", "title": "初等假设检验", "content": "x" * 500},
+        {"chapter_index": "line-3339", "title": "概率论的怪异应用", "content": "x" * 500},
+    ]
+
+    preflight = BookService.run_import_local_preflight(chunks)
+
+    assert preflight["severity"] == "ok"
+    assert [chapter["chapter_index"] for chapter in preflight["chapters"]] == [
+        "0",
+        "line-5",
+        "line-511",
+        "line-1432",
+        "line-2538",
+        "line-3339",
+    ]
+    assert [chapter["position"] for chapter in preflight["chapters"]] == [1, 2, 3, 4, 5, 6]
+    assert preflight["chapters"][1]["display_index"] == ""
+    assert preflight["chapters"][1]["source_line"] == 5
+
+
 def test_resolve_import_source_prefers_directory_full_md_when_no_meta_json(tmp_path):
     book_dir = tmp_path / "book"
     book_dir.mkdir()
@@ -306,3 +333,10 @@ def test_import_preflight_chapter_table_includes_rule_based_content_type():
 
     assert "1 | Groups | main_text | 4 chars" in table
     assert "1.1 | EXERCISES | exercise | 8 chars" in table
+
+
+def test_import_preflight_prompt_distinguishes_source_line_fallbacks_from_chapter_numbers():
+    system_prompt = PromptRegistry.get(PromptId.IMPORT_PREFLIGHT).system
+
+    assert "line-N" in system_prompt
+    assert "never compare it as a semantic chapter number" in system_prompt

@@ -55,6 +55,8 @@ class PromptRegistry:
                 "The user will provide only a chapter list with chapter index, title, and character count.\n"
                 "Each row also includes a rule-based content_type label such as main_text, exercise, example, appendix, "
                 "preface, or reference. Treat it as advisory context, not as an issue by itself.\n"
+                "Rows are already in canonical source-text order. An index in the form line-N is only a source-line "
+                "fallback for an unnumbered heading; never compare it as a semantic chapter number or flag its gaps.\n"
                 "Only identify major import problems: duplicate indexes, chapter index order inversions, chapters under "
                 "30 characters, chapters over 80000 characters, or clearly unusable headings.\n"
                 "Do not flag rhetorical section titles, ordinary subsections, high but plausible chapter counts, "

@@ -4,6 +4,12 @@ class ReaderTreeService:
         return chapter.title_zh or chapter.title_en or chapter.chapter_index
 
     @staticmethod
+    def chapter_label(chapter_index: str) -> str:
+        value = str(chapter_index or "")
+        prefix, separator, suffix = value.partition("-")
+        return "" if prefix == "line" and separator and suffix.isdigit() else value
+
+    @staticmethod
     def index_depth(chapter_index: str) -> int:
         return len(str(chapter_index or "").split("."))
 
@@ -53,7 +59,7 @@ class ReaderTreeService:
             "kind": "leaf",
             "type": "chapter",
             "title": title or ReaderTreeService.chapter_title(chapter),
-            "label": chapter.chapter_index,
+            "label": ReaderTreeService.chapter_label(chapter.chapter_index),
             "chapter_id": chapter.id,
             "chapter_index": chapter.chapter_index,
             "content_type": getattr(chapter, "content_type", None) or "main_text",
@@ -69,7 +75,7 @@ class ReaderTreeService:
             "kind": "directory",
             "type": "directory",
             "title": ReaderTreeService.chapter_title(chapter),
-            "label": chapter.chapter_index,
+            "label": ReaderTreeService.chapter_label(chapter.chapter_index),
             "chapter_id": chapter.id,
             "chapter_index": chapter.chapter_index,
             "content_type": getattr(chapter, "content_type", None) or "main_text",
@@ -79,6 +85,7 @@ class ReaderTreeService:
     @staticmethod
     def build_book_tree(chapters) -> list[dict]:
         ordered = ReaderTreeService.sorted_chapters(chapters)
+        source_positions = {id(chapter): position for position, chapter in enumerate(ordered)}
         by_index = {chapter.chapter_index: chapter for chapter in ordered}
         children_by_parent: dict[str | None, list] = {}
         for chapter in ordered:
@@ -99,17 +106,32 @@ class ReaderTreeService:
             node["children"].extend(build_node(child) for child in child_chapters if child.chapter_index in by_index)
             return node
 
-        roots = [build_node(chapter) for chapter in children_by_parent.get(None, [])]
+        root_entries = [
+            (
+                source_positions[id(chapter)],
+                ReaderTreeService.index_sort_key(chapter.chapter_index),
+                build_node(chapter),
+            )
+            for chapter in children_by_parent.get(None, [])
+        ]
         missing_parent_indexes = [
             parent
             for parent in children_by_parent
             if parent is not None and parent not in by_index
         ]
-        for parent in sorted(missing_parent_indexes, key=ReaderTreeService.index_sort_key):
+        for parent in missing_parent_indexes:
             node = ReaderTreeService.synthetic_directory(parent)
-            node["children"].extend(build_node(child) for child in children_by_parent.get(parent, []))
-            roots.append(node)
-        return roots
+            child_chapters = children_by_parent.get(parent, [])
+            node["children"].extend(build_node(child) for child in child_chapters)
+            root_entries.append(
+                (
+                    min(source_positions[id(child)] for child in child_chapters),
+                    ReaderTreeService.index_sort_key(parent),
+                    node,
+                )
+            )
+        root_entries.sort(key=lambda entry: (entry[0], entry[1]))
+        return [entry[2] for entry in root_entries]
 
     @staticmethod
     def guide_leaf(guide: dict, chapter=None, chapter_index: str | None = None) -> dict:

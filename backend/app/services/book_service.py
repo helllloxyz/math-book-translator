@@ -119,15 +119,22 @@ class BookService:
     @staticmethod
     def build_import_chapter_preview(chunks: list[dict]) -> list[dict]:
         preview = []
-        for chunk in chunks:
+        for position, chunk in enumerate(chunks, start=1):
             content = chunk.get("content") or ""
+            chapter_index = str(chunk.get("chapter_index") or "").strip() or "?"
+            source_line_match = re.fullmatch(r"line-(\d+)", chapter_index)
+            is_preamble = chapter_index == "0" and chunk.get("title") == "导入前置内容"
             content_type = chunk.get("content_type") or BookService.classify_chapter_content_type(
                 chunk.get("title") or "",
                 content,
             )
             preview.append(
                 {
-                    "chapter_index": str(chunk.get("chapter_index") or "").strip() or "?",
+                    "position": position,
+                    "chapter_index": chapter_index,
+                    "display_index": "" if is_preamble or source_line_match else chapter_index,
+                    "index_kind": "preamble" if is_preamble else "source_line" if source_line_match else "semantic",
+                    "source_line": int(source_line_match.group(1)) if source_line_match else None,
                     "title": " ".join(str(chunk.get("title") or "").split()) or "Untitled",
                     "char_count": len(content),
                     "content_type": content_type,
@@ -194,19 +201,16 @@ class BookService:
         }
 
     @staticmethod
-    def _chapter_index_sort_key(chapter_index: str) -> tuple:
-        parts = []
-        for part in str(chapter_index or "").split("."):
-            if part.isdigit():
-                parts.append((0, int(part)))
-            else:
-                parts.append((1, part))
-        return tuple(parts)
+    def _chapter_index_sort_key(chapter_index: str) -> tuple[int, ...] | None:
+        value = str(chapter_index or "").strip()
+        if not re.fullmatch(r"\d+(?:\.\d+)*", value):
+            return None
+        return tuple(int(part) for part in value.split("."))
 
     @staticmethod
     def run_import_local_preflight(chunks: list[dict]) -> dict:
         issues = []
-        recommendation = "章节序列看起来可用。请确认预览与原书目录一致后继续导入。"
+        recommendation = "章节将严格按原文出现顺序导入。请确认预览与原书目录一致后继续。"
 
         seen_indexes: dict[str, list[dict]] = {}
         for chunk in chunks:
@@ -241,6 +245,8 @@ class BookService:
         for chunk in chunks:
             chapter_index = str(chunk.get("chapter_index") or "?").strip() or "?"
             current_key = BookService._chapter_index_sort_key(chapter_index)
+            if current_key is None:
+                continue
             if previous_key is not None and current_key < previous_key:
                 inversions.append(f"{previous_index} -> {chapter_index}")
             previous_key = current_key
@@ -250,7 +256,7 @@ class BookService:
             issues.append(
                 {
                     "code": "chapter_index_order",
-                    "message": f"章节编号顺序不连续或倒置，共 {len(inversions)} 处{suffix}。",
+                    "message": f"可识别的章节编号出现倒序，共 {len(inversions)} 处{suffix}。目录仍按原文顺序显示。",
                     "examples": inversions[:5],
                 }
             )
@@ -273,7 +279,7 @@ class BookService:
             )
 
         if issues:
-            recommendation = "导入前请重点检查重复编号、章节顺序和近空章节。"
+            recommendation = "目录将保持原文顺序；导入前请重点检查重复编号、编号倒序和近空章节。"
 
         return {
             "severity": "warning" if issues else "ok",
