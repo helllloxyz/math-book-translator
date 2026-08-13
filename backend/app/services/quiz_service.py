@@ -1,6 +1,7 @@
 import json
 import logging
 import random
+import re
 from datetime import datetime
 from typing import Any
 
@@ -25,6 +26,14 @@ from app.services.quiz_skill_registry import (
 from app.services.translator import TranslatorService
 
 logger = logging.getLogger("app.quiz_service")
+
+
+QUIZ_MATH_MARKUP_RULES = (
+    "Preserve mathematical notation in question_text using KaTeX-compatible $...$ delimiters. "
+    "Do not rewrite formulas as plain-text approximations such as 'F: N → M', 'R^m', or 'F^(-1)(V)'. "
+    "Because the response is JSON, escape every LaTeX backslash with a second backslash. For example, "
+    "the raw JSON string must contain '$F \\\\colon N \\\\to M$'. "
+)
 
 
 class QuizGenerationError(RuntimeError):
@@ -323,7 +332,8 @@ class QuizService:
             "claims supported by the source, write in Chinese, and do not include the answer or profile evidence. Return "
             "strictly valid JSON with question_text, difficulty, target_concepts, expected_points, common_mistakes, and "
             "context_refs. Keep arrays concise. context_refs must quote a short heading, result name, or distinctive phrase "
-            "that occurs verbatim in the chapter."
+            "that occurs verbatim in the chapter. "
+            f"{QUIZ_MATH_MARKUP_RULES}"
         )
         user_prompt = (
             f"{context}\n\n"
@@ -332,39 +342,59 @@ class QuizService:
             f"Evaluation focus: {skill.evaluation_prompt}"
         )
         raw = ""
-        try:
-            raw = await translator.complete(user_prompt, system_prompt, temperature=0.35)
-            parsed = extract_json_candidate(raw, validator=lambda value: isinstance(value, dict))
-            quality_issues = QuizService._candidate_quality_issues(
-                parsed,
-                context,
-                generic_anchors=(
-                    book.title,
-                    chapter.chapter_index if chapter else "",
-                    chapter.title_zh or "" if chapter else "",
-                    chapter.title_en or "" if chapter else "",
-                ),
-            )
-            if quality_issues:
-                raise ValueError("; ".join(quality_issues))
-            normalized = QuizService.normalize_question_data(
-                parsed,
-                book_id=book.id,
-                chapter_id=chapter.id if chapter else None,
-                question_type=skill.question_type,
-                quiz_mode=mode,
-                source=source,
-            )
-        except Exception as exc:
-            logger.warning(
-                "Quiz question generation failed provider=%s model=%s response_chars=%s response_preview=%r error=%s",
-                getattr(translator, "provider", "unknown"),
-                getattr(translator, "model_name", "unknown"),
-                len(raw),
-                raw[:400],
-                exc,
-            )
-            raise QuizGenerationError(f"Quiz 出题失败：{exc}") from exc
+        rejection_reasons: list[str] = []
+        last_error: Exception | None = None
+        for attempt in range(2):
+            try:
+                repair_prompt = ""
+                if rejection_reasons:
+                    repair_prompt = (
+                        "\n\nThe previous response was rejected for these reasons: "
+                        f"{json.dumps(rejection_reasons, ensure_ascii=False)}. Regenerate the question."
+                    )
+                raw = await translator.complete(
+                    f"{user_prompt}{repair_prompt}",
+                    system_prompt,
+                    temperature=0.35,
+                )
+                parsed = extract_json_candidate(raw, validator=lambda value: isinstance(value, dict))
+                quality_issues = QuizService._candidate_quality_issues(
+                    parsed,
+                    context,
+                    generic_anchors=(
+                        book.title,
+                        chapter.chapter_index if chapter else "",
+                        chapter.title_zh or "" if chapter else "",
+                        chapter.title_en or "" if chapter else "",
+                    ),
+                )
+                if quality_issues:
+                    raise ValueError("; ".join(quality_issues))
+                normalized = QuizService.normalize_question_data(
+                    parsed,
+                    book_id=book.id,
+                    chapter_id=chapter.id if chapter else None,
+                    question_type=skill.question_type,
+                    quiz_mode=mode,
+                    source=source,
+                )
+                last_error = None
+                break
+            except Exception as exc:
+                last_error = exc
+                rejection_reasons = [f"{type(exc).__name__}: {exc}"]
+                logger.warning(
+                    "Quiz question generation failed attempt=%s provider=%s model=%s response_chars=%s "
+                    "response_preview=%r error=%s",
+                    attempt + 1,
+                    getattr(translator, "provider", "unknown"),
+                    getattr(translator, "model_name", "unknown"),
+                    len(raw),
+                    raw[:400],
+                    exc,
+                )
+        if last_error is not None:
+            raise QuizGenerationError(f"Quiz 出题失败：{last_error}") from last_error
 
         question = QuizQuestion(**normalized)
         db.add(question)
@@ -394,6 +424,8 @@ class QuizService:
         issues = []
         if not question_text:
             issues.append("question_text is empty")
+        if QuizService._contains_plain_text_math(question_text):
+            issues.append("question_text contains mathematical notation outside KaTeX delimiters")
         if any(
             phrase.casefold() in question_text.casefold()
             for phrase in QuizService.GENERIC_SOURCE_SELECTION_PHRASES
@@ -438,12 +470,32 @@ class QuizService:
         return issues
 
     @staticmethod
+    def _contains_plain_text_math(question_text: str) -> bool:
+        outside_math = re.sub(
+            r"\$\$[\s\S]*?\$\$|\$(?:\\.|[^$])+\$|\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]",
+            " ",
+            str(question_text or ""),
+        )
+        return bool(
+            re.search(
+                r"(?:->|<-|[→↦⇒⇐⇔∘∈∉⊂⊆≈≅≤≥∞])"
+                r"|(?:[A-Za-zΑ-Ωα-ω][A-Za-z0-9Α-Ωα-ω]*\s*[\^_]\s*"
+                r"(?:\([^)]*\)|\{[^}]*\}|[-+]?[A-Za-z0-9∞]+))"
+                r"|(?<![A-Za-z0-9])(?:[A-Za-z])\s*\([^，。？！\n()]{1,60}\)"
+                r"|(?:\\[A-Za-z]+)",
+                outside_math,
+            )
+        )
+
+    @staticmethod
     def _is_reusable_bank_question(question: QuizQuestion) -> bool:
         source = str(question.source or "")
         question_text = " ".join(str(question.question_text or "").split())
         if source.endswith("_fallback"):
             return False
         if not question_text or not question.target_concepts or not question.context_refs or not question.expected_points:
+            return False
+        if QuizService._contains_plain_text_math(question_text):
             return False
         if any(
             phrase.casefold() in question_text.casefold()
@@ -595,7 +647,8 @@ class QuizService:
             "target_concepts must name the concrete mathematical objects being tested. context_refs must contain a short "
             "heading, definition/result name, or distinctive source phrase that occurs verbatim in the supplied chapter. "
             "Use 1-3 concise strings in each array. expected_points must be specific to that source anchor, not generic "
-            "skill criteria. Do not add prose outside the JSON."
+            "skill criteria. Do not add prose outside the JSON. "
+            f"{QUIZ_MATH_MARKUP_RULES}"
         )
         user_prompt = (
             f"{context}\n\n"

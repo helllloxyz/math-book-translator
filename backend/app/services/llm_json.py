@@ -8,9 +8,40 @@ class JSONExtractionError(ValueError):
     """Raised when an LLM response has no JSON value matching the expected schema."""
 
 
+_DOLLAR_MATH_PATTERN = re.compile(
+    r"(?P<delimiter>\${1,2})(?P<body>.*?)(?P=delimiter)",
+    re.DOTALL,
+)
+
+
+def _escape_json_backslashes_in_dollar_math(text: str) -> str:
+    r"""Repair unescaped LaTeX commands inside JSON Markdown math spans.
+
+    Models sometimes emit a JSON string such as ``"$F \to M$"``. A single
+    backslash is either invalid JSON (``\colon``) or is silently interpreted as
+    a JSON escape (``\to`` starts with a tab escape). Only dollar-delimited math
+    is repaired so ordinary JSON escapes outside formulas retain their meaning.
+    """
+
+    def repair_math_span(match: re.Match[str]) -> str:
+        body = re.sub(
+            r"\\+",
+            lambda slash_run: (
+                slash_run.group(0)
+                if len(slash_run.group(0)) % 2 == 0
+                else f"{slash_run.group(0)}\\"
+            ),
+            match.group("body"),
+        )
+        delimiter = match.group("delimiter")
+        return f"{delimiter}{body}{delimiter}"
+
+    return _DOLLAR_MATH_PATTERN.sub(repair_math_span, text)
+
+
 def parse_json_text(text: str) -> Any | None:
     try:
-        return json.loads(text.strip())
+        return json.loads(_escape_json_backslashes_in_dollar_math(text).strip())
     except json.JSONDecodeError:
         return None
 
@@ -22,6 +53,7 @@ def iter_fenced_json_payloads(text: str):
 
 
 def iter_json_objects(text: str):
+    text = _escape_json_backslashes_in_dollar_math(text)
     decoder = json.JSONDecoder()
     for match in re.finditer(r"\{", text):
         try:
@@ -32,6 +64,7 @@ def iter_json_objects(text: str):
 
 
 def iter_json_arrays(text: str):
+    text = _escape_json_backslashes_in_dollar_math(text)
     decoder = json.JSONDecoder()
     for match in re.finditer(r"\[", text):
         try:

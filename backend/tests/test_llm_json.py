@@ -54,6 +54,24 @@ def test_extract_json_candidate_supports_array_embedded_in_prose():
     assert parsed == [{"question_text": "题目一"}]
 
 
+def test_extract_json_candidate_repairs_single_latex_backslashes_inside_math():
+    parsed = extract_json_candidate(
+        r'{"question_text":"请解释 $F \colon N \to \mathbb{R}^m$"}',
+        validator=lambda data: isinstance(data, dict),
+    )
+
+    assert parsed["question_text"] == r"请解释 $F \colon N \to \mathbb{R}^m$"
+
+
+def test_extract_json_candidate_preserves_correctly_escaped_latex():
+    parsed = extract_json_candidate(
+        r'{"question_text":"请解释 $F \\colon N \\to \\mathbb{R}^m$"}',
+        validator=lambda data: isinstance(data, dict),
+    )
+
+    assert parsed["question_text"] == r"请解释 $F \colon N \to \mathbb{R}^m$"
+
+
 def test_extract_json_candidate_reports_probable_truncation():
     with pytest.raises(JSONExtractionError, match="may have been truncated; response_chars="):
         extract_json_candidate(

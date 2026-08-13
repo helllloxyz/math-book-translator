@@ -183,8 +183,69 @@ async def test_question_generation_uses_feynman_and_type_specific_prompts(monkey
     assert QUIZ_SKILLS[question_type].evaluation_prompt in user_prompt
     assert "Never require a calculation, formula entry" in system_prompt
     assert "ordinary natural language" in system_prompt
+    assert "KaTeX-compatible $...$ delimiters" in system_prompt
+    assert "escape every LaTeX backslash" in system_prompt
     assert question.question_type == question_type
     assert question.quiz_mode == "chapter"
+
+
+@pytest.mark.asyncio
+async def test_single_question_generation_retries_plain_text_formula_notation(monkeypatch):
+    calls = []
+    responses = [
+        {
+            "question_text": "分量函数如何帮助研究映射 F: N → M？",
+            "target_concepts": ["分量函数"],
+            "context_refs": ["分量函数"],
+            "expected_points": ["说明局部坐标的作用"],
+        },
+        {
+            "question_text": r"分量函数如何帮助研究映射 $F \colon N \to M$？",
+            "target_concepts": ["分量函数"],
+            "context_refs": ["分量函数"],
+            "expected_points": ["说明局部坐标的作用"],
+        },
+    ]
+
+    class FakeTranslator:
+        api_key = "configured"
+
+        def __init__(self, **_kwargs):
+            pass
+
+        async def complete(self, user_prompt, system_prompt, temperature):
+            calls.append((user_prompt, system_prompt, temperature))
+            return json.dumps(responses[len(calls) - 1], ensure_ascii=False)
+
+    class FakeDb:
+        def add(self, _value):
+            pass
+
+        async def commit(self):
+            pass
+
+        async def refresh(self, _value):
+            pass
+
+    async def context(*_args, **_kwargs):
+        return "SOURCE BODY：分量函数将映射的光滑性化为实值函数的光滑性。"
+
+    monkeypatch.setattr("app.services.quiz_service.TranslatorService", FakeTranslator)
+    monkeypatch.setattr(QuizService, "build_generation_context", context)
+    book = SimpleNamespace(id=1, uuid="book-uuid", title="Book")
+    chapter = SimpleNamespace(id=2, chapter_index="1", title_zh="分量", title_en=None)
+
+    question = await QuizService.generate_question(
+        book=book,
+        chapter=chapter,
+        question_type="concept_explain",
+        quiz_mode="chapter",
+        db=FakeDb(),
+    )
+
+    assert len(calls) == 2
+    assert "outside KaTeX delimiters" in calls[1][0]
+    assert question.question_text == responses[1]["question_text"]
 
 
 @pytest.mark.asyncio
@@ -289,6 +350,7 @@ async def test_candidate_generation_uses_one_call_and_includes_previous_question
     assert "题库中的旧题" in calls[0][0]
     assert "must not repeat or lightly paraphrase" in calls[0][1]
     assert "must explicitly name that source anchor" in calls[0][1]
+    assert "KaTeX-compatible $...$ delimiters" in calls[0][1]
     assert {question.question_type for question in questions} == {
         "concept_explain",
         "theorem_understanding",
@@ -376,6 +438,37 @@ def test_candidate_quality_gate_rejects_generic_fallback_questions():
     assert "question delegates source selection to the learner" in issues
 
 
+def test_candidate_quality_gate_rejects_plain_text_formula_notation():
+    issues = QuizService._candidate_quality_issues(
+        {
+            "question_text": "请解释映射 F: N → M 与分量 y^i ∘ F 的关系。",
+            "target_concepts": ["分量函数"],
+            "context_refs": ["分量函数"],
+            "expected_points": ["说明坐标化的作用"],
+        },
+        "正文介绍了分量函数。",
+    )
+
+    assert "question_text contains mathematical notation outside KaTeX delimiters" in issues
+
+    assert QuizService._contains_plain_text_math("请说明 F(t) = (cos t, sin t) 为什么光滑。")
+    assert QuizService._contains_plain_text_math("请说明这个等价链中的 ⇔ 。")
+
+
+def test_candidate_quality_gate_accepts_katex_delimited_formulas():
+    issues = QuizService._candidate_quality_issues(
+        {
+            "question_text": r"请解释映射 $F \colon N \to M$ 与分量 $y^i \circ F$ 的关系。",
+            "target_concepts": ["分量函数"],
+            "context_refs": ["分量函数"],
+            "expected_points": ["说明坐标化的作用"],
+        },
+        "正文介绍了分量函数。",
+    )
+
+    assert "question_text contains mathematical notation outside KaTeX delimiters" not in issues
+
+
 def test_bank_reuse_excludes_legacy_fallback_and_keeps_grounded_questions():
     fallback = QuizQuestion(
         source="chapter_candidate_fallback",
@@ -396,6 +489,19 @@ def test_bank_reuse_excludes_legacy_fallback_and_keeps_grounded_questions():
 
     assert QuizService._is_reusable_bank_question(fallback) is False
     assert QuizService._is_reusable_bank_question(grounded) is True
+
+
+def test_bank_reuse_excludes_questions_with_plain_text_formula_notation():
+    question = QuizQuestion(
+        source="chapter_candidate_batch",
+        question_type="concept_explain",
+        question_text="请解释 F: N → M 为什么光滑。",
+        target_concepts=["光滑映射"],
+        context_refs=["光滑映射"],
+        expected_points=["说明局部表示"],
+    )
+
+    assert QuizService._is_reusable_bank_question(question) is False
 
 
 @pytest.mark.asyncio
