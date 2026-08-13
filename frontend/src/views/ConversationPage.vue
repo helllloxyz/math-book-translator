@@ -110,7 +110,7 @@ const collectQuizQuestionHistory = () => uniqueQuestionTexts([
   card.value?.questionText
 ]).slice(-30)
 
-const generateQuizQuestion = async () => {
+const generateQuizQuestion = async ({ forceGenerate = false } = {}) => {
   if (!card.value || !quizRequest.value?.chapterId || card.value.loading) return
 
   const request = quizRequest.value
@@ -139,8 +139,10 @@ const generateQuizQuestion = async () => {
       quizMode: request.quizMode || 'chapter',
       questionType: request.questionType || null,
       personalizationContext: request.personalizationContext || '',
-      count: 3,
-      previousQuestions
+      candidateCount: request.candidateCount,
+      generationCount: request.generationCount,
+      previousQuestions,
+      forceGenerate
     })
     if (!questions.length) throw new Error('没有生成可用的候选题。')
     card.value.quizCandidates = questions.map(question => ({ ...question, display_text: '' }))
@@ -172,7 +174,7 @@ const generateQuizQuestion = async () => {
 }
 
 const handleRegenerateQuiz = () => {
-  generateQuizQuestion()
+  generateQuizQuestion({ forceGenerate: true })
 }
 
 const handleSelectQuizQuestion = (question) => {

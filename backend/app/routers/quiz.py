@@ -9,7 +9,7 @@ from app.models.schema import (
     QuizSelectTargetRequest,
 )
 from app.services.learning_profile_service import LearningProfileService
-from app.services.quiz_service import QuizService
+from app.services.quiz_service import QuizGenerationError, QuizService
 
 router = APIRouter()
 
@@ -74,6 +74,8 @@ async def next_chapter_quiz(chapter_id: int, request: QuizNextRequest, db: Async
             personalization_context=request.personalization_context,
             db=db,
         )
+    except QuizGenerationError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not question:
@@ -91,8 +93,12 @@ async def quiz_candidates(chapter_id: int, request: QuizNextRequest, db: AsyncSe
             question_type=request.question_type,
             personalization_context=request.personalization_context,
             previous_questions=request.previous_questions,
+            force_generate=request.force_generate,
+            generation_count=request.generation_count,
             db=db,
         )
+    except QuizGenerationError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if questions is None:

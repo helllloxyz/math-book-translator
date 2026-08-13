@@ -1,4 +1,6 @@
-from app.services.llm_json import extract_json_candidate
+import pytest
+
+from app.services.llm_json import JSONExtractionError, extract_json_candidate
 
 
 def test_extract_json_candidate_prefers_matching_fenced_json_block():
@@ -31,3 +33,38 @@ def test_extract_json_candidate_falls_back_to_object_scan():
     )
 
     assert parsed["guides"][0]["slug"] == "01-overview"
+
+
+def test_extract_json_candidate_supports_top_level_array_with_transform():
+    parsed = extract_json_candidate(
+        '[{"question_text":"题目一"}]',
+        validator=lambda data: isinstance(data, (dict, list)),
+        transform=lambda data: {"questions": data} if isinstance(data, list) else data,
+    )
+
+    assert parsed == {"questions": [{"question_text": "题目一"}]}
+
+
+def test_extract_json_candidate_supports_array_embedded_in_prose():
+    parsed = extract_json_candidate(
+        'Here is the result:\n[{"question_text":"题目一"}]\nDone.',
+        validator=lambda data: isinstance(data, list),
+    )
+
+    assert parsed == [{"question_text": "题目一"}]
+
+
+def test_extract_json_candidate_reports_probable_truncation():
+    with pytest.raises(JSONExtractionError, match="may have been truncated; response_chars="):
+        extract_json_candidate(
+            '{"questions":[{"question_text":"未完成"}',
+            validator=lambda data: isinstance(data, dict) and "questions" in data,
+        )
+
+
+def test_extract_json_candidate_reports_schema_mismatch_for_valid_json():
+    with pytest.raises(JSONExtractionError, match="did not match the expected schema"):
+        extract_json_candidate(
+            '{"items":[]}',
+            validator=lambda data: isinstance(data, dict) and "questions" in data,
+        )

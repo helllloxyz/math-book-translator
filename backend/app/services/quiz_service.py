@@ -27,9 +27,30 @@ from app.services.translator import TranslatorService
 logger = logging.getLogger("app.quiz_service")
 
 
+class QuizGenerationError(RuntimeError):
+    """Raised when the model cannot produce source-grounded quiz questions."""
+
+
 class QuizService:
     CHAPTER_BANK_SPARSE_THRESHOLD = 3
-    CHAPTER_BANK_BATCH_SIZE = 3
+    SPARSE_BANK_TYPE_COUNT = 3
+    DEFAULT_BANK_GENERATION_COUNT = 6
+    MAX_CANDIDATE_COUNT = 10
+    GENERIC_SOURCE_SELECTION_PHRASES = (
+        "请选择本章中的一个",
+        "请选择本章中一个",
+        "中的一个重要证明",
+        "中的一个关键定理",
+        "中的一个关键结论",
+        "最核心的一个概念",
+        "选择一个重要证明",
+        "选择一个关键定理",
+        "选择一个关键结论",
+        "choose an important proof",
+        "choose a key theorem",
+        "choose a key result",
+        "choose a core concept",
+    )
 
     @staticmethod
     def question_to_dict(question: QuizQuestion) -> dict[str, Any]:
@@ -111,9 +132,21 @@ class QuizService:
         for question_type, _weight in weighted_types:
             if question_type not in ordered:
                 ordered.append(question_type)
-            if len(ordered) >= QuizService.CHAPTER_BANK_BATCH_SIZE:
+            if len(ordered) >= QuizService.SPARSE_BANK_TYPE_COUNT:
                 break
         return ordered
+
+    @staticmethod
+    def candidate_batch_question_types(selected_type: str, count: int) -> list[str]:
+        ordered = [selected_type]
+        for question_type, _weight in sorted(
+            question_type_weights().items(),
+            key=lambda item: item[1],
+            reverse=True,
+        ):
+            if question_type not in ordered:
+                ordered.append(question_type)
+        return [ordered[index % len(ordered)] for index in range(max(1, count))]
 
     @staticmethod
     async def _book_guide_text(book_uuid: str) -> str:
@@ -149,28 +182,40 @@ class QuizService:
         chapter: Chapter | None,
         question_type: str,
         quiz_mode: str = CHAPTER_QUIZ_MODE,
+        *,
+        include_skill_details: bool = True,
     ) -> str:
         skill = get_quiz_skill(question_type)
         mode = normalize_quiz_mode(quiz_mode)
+        required_context = (
+            ("chapter_body",)
+            if mode == CHAPTER_QUIZ_MODE
+            else skill.required_context
+        )
         mode_goal = (
             "This is a Book Quiz: diagnose the learner's selected weak point in the book. "
             "Use the personalization context as a targeting instruction, but do not reveal private profile evidence in the question."
             if mode == BOOK_QUIZ_MODE
             else (
                 "This is a Chapter Quiz: ask one focused teach-back question about the current chapter. "
-                "The chapter body is authoritative; guides only provide structural orientation."
+                "Use the chapter body as the only source context."
             )
         )
         parts = [
             f"Book: {book.title}",
             f"Quiz mode: {mode}",
             f"Mode goal: {mode_goal}",
-            f"Question type: {skill.question_type}",
-            f"Goal: {skill.goal}",
-            f"Required context: {', '.join(skill.required_context)}",
-            f"Type-specific generation instruction: {skill.generation_prompt}",
-            f"How the learner should answer: {skill.answer_guidance}",
+            f"Required context: {', '.join(required_context)}",
         ]
+        if include_skill_details:
+            parts.extend(
+                [
+                    f"Question type: {skill.question_type}",
+                    f"Goal: {skill.goal}",
+                    f"Type-specific generation instruction: {skill.generation_prompt}",
+                    f"How the learner should answer: {skill.answer_guidance}",
+                ]
+            )
         if chapter:
             parts.append(
                 f"Chapter: {chapter.chapter_index} {chapter.title_zh or chapter.title_en or ''}".strip()
@@ -187,11 +232,17 @@ class QuizService:
                         "):"
                     ),
                     chapter_source["body"],
-                    "Chapter guide:",
-                    await QuizService._chapter_guide_text(book.uuid, chapter.chapter_index),
                 ]
             )
-        parts.extend(["Book guide:", await QuizService._book_guide_text(book.uuid)])
+            if mode == BOOK_QUIZ_MODE:
+                parts.extend(
+                    [
+                        "Chapter guide:",
+                        await QuizService._chapter_guide_text(book.uuid, chapter.chapter_index),
+                    ]
+                )
+        if mode == BOOK_QUIZ_MODE:
+            parts.extend(["Book guide:", await QuizService._book_guide_text(book.uuid)])
         return "\n\n".join(parts).strip()
 
     @staticmethod
@@ -219,7 +270,7 @@ class QuizService:
             common_mistakes = [common_mistakes]
         question_text = str(data.get("question_text") or data.get("question") or "").strip()
         if not question_text:
-            question_text = f"请围绕本章完成一次「{skill.label}」：{skill.answer_guidance}"
+            raise ValueError("question_text is required")
         return {
             "book_id": book_id,
             "chapter_id": chapter_id,
@@ -237,65 +288,6 @@ class QuizService:
             else skill.evaluation_rubric,
             "followup_strategy": str(data.get("followup_strategy") or skill.next_step_rule),
         }
-
-    @staticmethod
-    def _fallback_question_data(
-        *,
-        book_id: int,
-        chapter_id: int | None,
-        chapter_title: str,
-        question_type: str,
-        quiz_mode: str,
-        source: str,
-        personalization_context: str | None = None,
-    ) -> dict[str, Any]:
-        skill = get_quiz_skill(question_type)
-        personalization_hint = str(personalization_context or "").strip()
-        target_concept = next(
-            (
-                line.split(":", 1)[1].strip()
-                for line in personalization_hint.splitlines()
-                if line.lower().startswith("target concept:") and ":" in line
-            ),
-            "",
-        )
-        target_hint = f"，重点围绕「{target_concept}」" if target_concept else ""
-        fallback_questions = {
-            "concept_explain": (
-                f"假设你要向刚读到「{chapter_title or '本章'}」的同学讲解其中最核心的一个概念{target_hint}。"
-                "它描述什么、最关键的性质是什么？请再用一个例子或直观后果帮助对方理解。"
-            ),
-            "theorem_understanding": (
-                f"请选择「{chapter_title or '本章'}」中的一个关键定理或结论{target_hint}，用自己的话说明："
-                "它需要哪些关键条件、保证了什么，以及其中一个条件为什么不能随便删掉。"
-            ),
-            "proof_strategy": (
-                f"请选择「{chapter_title or '本章'}」中的一个重要证明{target_hint}，像口头讲解一样说出证明路线："
-                "从哪里出发，关键转折是什么，它怎样把问题推进到结论？不用写完整公式推导。"
-            ),
-            "concept_connection": (
-                f"请选择「{chapter_title or '本章'}」中两个有直接联系的概念或结果{target_hint}。"
-                "请分别说明它们的角色，再解释两者怎样连接、为什么要放在一起理解。"
-            ),
-        }
-        question_text = fallback_questions[skill.question_type]
-        data = {
-            "question_text": question_text,
-            "target_concepts": [item for item in [chapter_title, target_concept] if item],
-            "expected_points": list(skill.expected_points),
-            "common_mistakes": [
-                "只重复书中的结论，没有解释为什么",
-                "堆砌术语或公式，却没有讲清逻辑关系",
-            ],
-        }
-        return QuizService.normalize_question_data(
-            data,
-            book_id=book_id,
-            chapter_id=chapter_id,
-            question_type=question_type,
-            quiz_mode=quiz_mode,
-            source=source,
-        )
 
     @staticmethod
     async def generate_question(
@@ -320,54 +312,59 @@ class QuizService:
             context = f"{context}\n\nPersonalization context:\n{personalization_context}"
 
         translator = TranslatorService(task="quiz")
-        normalized: dict[str, Any] | None = None
-        if getattr(translator, "api_key", None):
-            system_prompt = (
-                "You design one Feynman-style teach-back question for a reader of a serious mathematics book. "
-                "The learner must be able to answer in ordinary natural language, typically in 2-6 sentences. "
-                "Never require typing a formula, carrying out a calculation, filling a missing equation, reproducing notation, "
-                "or writing a complete formal proof. You may ask what an existing formula means or how a proof works. "
-                "Use only claims actually supported by the supplied source. Ask one question with one coherent learning target, "
-                "write the question in Chinese, and do not include the answer or expose learning-profile evidence. "
-                "Return strictly valid JSON with keys: "
-                "question_text, difficulty, target_concepts, expected_points, common_mistakes, context_refs, "
-                "evaluation_rubric, followup_strategy. expected_points must describe semantic ideas, not exact keywords. "
-                "context_refs must identify the source section or named result that supports the question. "
-                "When personalization context is provided, target that concept or weakness without mentioning the profile itself."
+        if not getattr(translator, "api_key", None):
+            raise QuizGenerationError("Quiz 出题模型尚未配置。请先在设置中配置可用的 LLM。")
+        system_prompt = (
+            "You design one source-grounded Feynman-style teach-back question for a mathematics reader. "
+            "Explicitly name the exact definition, named result, proof endpoint, construction, or related objects from "
+            "the supplied chapter. Never ask the learner to choose a concept, theorem, result, or proof, and never use "
+            "the chapter title as the only anchor. The learner must be able to answer in ordinary natural language, "
+            "typically in 2-6 sentences. Never require a calculation, formula entry, or complete formal proof. Use only "
+            "claims supported by the source, write in Chinese, and do not include the answer or profile evidence. Return "
+            "strictly valid JSON with question_text, difficulty, target_concepts, expected_points, common_mistakes, and "
+            "context_refs. Keep arrays concise. context_refs must quote a short heading, result name, or distinctive phrase "
+            "that occurs verbatim in the chapter."
+        )
+        user_prompt = (
+            f"{context}\n\n"
+            f"Generate exactly one {skill.label} ({skill.question_type}) question.\n"
+            f"Type-specific instruction: {skill.generation_prompt}\n"
+            f"Evaluation focus: {skill.evaluation_prompt}"
+        )
+        raw = ""
+        try:
+            raw = await translator.complete(user_prompt, system_prompt, temperature=0.35)
+            parsed = extract_json_candidate(raw, validator=lambda value: isinstance(value, dict))
+            quality_issues = QuizService._candidate_quality_issues(
+                parsed,
+                context,
+                generic_anchors=(
+                    book.title,
+                    chapter.chapter_index if chapter else "",
+                    chapter.title_zh or "" if chapter else "",
+                    chapter.title_en or "" if chapter else "",
+                ),
             )
-            user_prompt = (
-                f"{context}\n\n"
-                f"Generate exactly one {skill.label} ({skill.question_type}) question.\n"
-                f"Type-specific instruction: {skill.generation_prompt}\n"
-                f"Evaluation focus: {skill.evaluation_prompt}\n"
-                f"Default semantic answer points: {json.dumps(skill.expected_points, ensure_ascii=False)}\n"
-                f"Default rubric: {json.dumps(skill.evaluation_rubric, ensure_ascii=False)}\n"
-                f"Follow-up rule: {skill.next_step_rule}"
-            )
-            try:
-                raw = await translator.complete(user_prompt, system_prompt, temperature=0.4)
-                parsed = extract_json_candidate(raw, validator=lambda value: isinstance(value, dict))
-                normalized = QuizService.normalize_question_data(
-                    parsed,
-                    book_id=book.id,
-                    chapter_id=chapter.id if chapter else None,
-                    question_type=skill.question_type,
-                    quiz_mode=mode,
-                    source=source,
-                )
-            except Exception as exc:
-                logger.warning("Quiz question generation failed: %s", exc)
-
-        if normalized is None:
-            normalized = QuizService._fallback_question_data(
+            if quality_issues:
+                raise ValueError("; ".join(quality_issues))
+            normalized = QuizService.normalize_question_data(
+                parsed,
                 book_id=book.id,
                 chapter_id=chapter.id if chapter else None,
-                chapter_title=chapter.title_zh or chapter.title_en or chapter.chapter_index if chapter else book.title,
                 question_type=skill.question_type,
                 quiz_mode=mode,
                 source=source,
-                personalization_context=personalization_context,
             )
+        except Exception as exc:
+            logger.warning(
+                "Quiz question generation failed provider=%s model=%s response_chars=%s response_preview=%r error=%s",
+                getattr(translator, "provider", "unknown"),
+                getattr(translator, "model_name", "unknown"),
+                len(raw),
+                raw[:400],
+                exc,
+            )
+            raise QuizGenerationError(f"Quiz 出题失败：{exc}") from exc
 
         question = QuizQuestion(**normalized)
         db.add(question)
@@ -376,7 +373,142 @@ class QuizService:
         return question
 
     @staticmethod
-    async def generate_question_candidates(
+    def _candidate_quality_issues(
+        data: dict[str, Any],
+        source_context: str,
+        *,
+        generic_anchors: tuple[str, ...] = (),
+    ) -> list[str]:
+        question_text = " ".join(str(data.get("question_text") or data.get("question") or "").split())
+        target_concepts = data.get("target_concepts") or []
+        if isinstance(target_concepts, str):
+            target_concepts = [target_concepts]
+        raw_context_refs = data.get("context_refs")
+        context_refs = raw_context_refs or []
+        if isinstance(context_refs, str):
+            context_refs = [context_refs]
+        expected_points = data.get("expected_points") or data.get("expected_answer_points") or []
+        if isinstance(expected_points, str):
+            expected_points = [expected_points]
+
+        issues = []
+        if not question_text:
+            issues.append("question_text is empty")
+        if any(
+            phrase.casefold() in question_text.casefold()
+            for phrase in QuizService.GENERIC_SOURCE_SELECTION_PHRASES
+        ):
+            issues.append("question delegates source selection to the learner")
+        anchors = [
+            " ".join(str(value or "").split()).strip()
+            for value in [*target_concepts, *context_refs]
+            if " ".join(str(value or "").split()).strip()
+        ]
+        if not target_concepts:
+            issues.append("target_concepts is empty")
+        if not context_refs:
+            issues.append("context_refs is empty")
+        elif not isinstance(raw_context_refs, list):
+            issues.append("context_refs must be a JSON array")
+        if not expected_points:
+            issues.append("expected_points is empty")
+        generic_anchor_keys = {
+            " ".join(str(value or "").split()).casefold()
+            for value in generic_anchors
+            if " ".join(str(value or "").split())
+        }
+        substantive_anchors = [
+            anchor for anchor in anchors if anchor.casefold() not in generic_anchor_keys
+        ]
+        if not substantive_anchors:
+            issues.append("the chapter or book title is the only source anchor")
+        folded_context = source_context.casefold()
+        if substantive_anchors and not any(
+            anchor.casefold() in folded_context
+            for anchor in substantive_anchors
+            if len(anchor) >= 2
+        ):
+            issues.append("no target concept or context reference can be found in the supplied source")
+        if substantive_anchors and not any(
+            anchor.casefold() in question_text.casefold()
+            for anchor in substantive_anchors
+            if len(anchor) >= 2
+        ):
+            issues.append("question_text does not name a concrete source anchor")
+        return issues
+
+    @staticmethod
+    def _is_reusable_bank_question(question: QuizQuestion) -> bool:
+        source = str(question.source or "")
+        question_text = " ".join(str(question.question_text or "").split())
+        if source.endswith("_fallback"):
+            return False
+        if not question_text or not question.target_concepts or not question.context_refs or not question.expected_points:
+            return False
+        if any(
+            phrase.casefold() in question_text.casefold()
+            for phrase in QuizService.GENERIC_SOURCE_SELECTION_PHRASES
+        ):
+            return False
+        return is_valid_question_type(question.question_type)
+
+    @staticmethod
+    async def choose_candidates_from_bank(
+        *,
+        book_id: int,
+        chapter_id: int,
+        question_type: str | None,
+        quiz_mode: str,
+        count: int,
+        previous_questions: list[str] | None,
+        db: AsyncSession,
+        mark_seen: bool = True,
+    ) -> list[QuizQuestion]:
+        mode = normalize_quiz_mode(quiz_mode)
+        query = select(QuizQuestion).where(
+            QuizQuestion.book_id == book_id,
+            QuizQuestion.chapter_id == chapter_id,
+            QuizQuestion.quiz_mode == mode,
+        )
+        if question_type:
+            query = query.where(QuizQuestion.question_type == canonical_question_type(question_type))
+        result = await db.execute(
+            query.order_by(
+                QuizQuestion.correct_count.asc(),
+                QuizQuestion.attempts_count.asc(),
+                QuizQuestion.times_seen.asc(),
+                QuizQuestion.created_at.asc(),
+            )
+        )
+        questions = [
+            question
+            for question in result.scalars().all()
+            if QuizService._is_reusable_bank_question(question)
+        ]
+        previous_keys = {
+            " ".join(str(value or "").split()).casefold()
+            for value in (previous_questions or [])
+            if " ".join(str(value or "").split())
+        }
+        unseen = [
+            question
+            for question in questions
+            if " ".join(str(question.question_text or "").split()).casefold() not in previous_keys
+        ]
+        repeated = [question for question in questions if question not in unseen]
+        selected = (unseen + repeated)[: max(1, min(QuizService.MAX_CANDIDATE_COUNT, count))]
+        if mark_seen and selected:
+            now = datetime.utcnow()
+            for question in selected:
+                question.times_seen = int(question.times_seen or 0) + 1
+                question.last_seen_at = now
+            await db.commit()
+            for question in selected:
+                await db.refresh(question)
+        return selected
+
+    @staticmethod
+    async def _generate_and_store_question_candidates(
         chapter_id: int,
         *,
         count: int,
@@ -386,9 +518,9 @@ class QuizService:
         previous_questions: list[str] | None,
         db: AsyncSession,
     ) -> list[QuizQuestion] | None:
-        """Generate a small, distinct candidate pool in one LLM call."""
+        """Generate and persist a small, source-grounded candidate pool in one LLM call."""
         mode = normalize_quiz_mode(quiz_mode)
-        candidate_count = max(1, min(QuizService.CHAPTER_BANK_BATCH_SIZE, int(count or 1)))
+        candidate_count = max(1, min(QuizService.MAX_CANDIDATE_COUNT, int(count or 1)))
         chapter = await QuizService._chapter_or_none(chapter_id, db)
         if not chapter:
             return None
@@ -401,15 +533,17 @@ class QuizService:
         if question_type:
             selected_types = [canonical_question_type(question_type)] * candidate_count
         else:
-            selected_types = QuizService.sparse_bank_question_types(
-                QuizService.weighted_random_question_type()
-            )[:candidate_count]
+            selected_types = QuizService.candidate_batch_question_types(
+                QuizService.weighted_random_question_type(),
+                candidate_count,
+            )
 
         context = await QuizService.build_generation_context(
             book,
             chapter,
             selected_types[0],
             mode,
+            include_skill_details=False,
         )
         if personalization_context:
             context = f"{context}\n\nPersonalization context:\n{personalization_context}"
@@ -438,87 +572,237 @@ class QuizService:
                     "generation_instruction": skill.generation_prompt,
                     "evaluation_focus": skill.evaluation_prompt,
                     "default_expected_points": skill.expected_points,
-                    "default_rubric": skill.evaluation_rubric,
-                    "followup_rule": skill.next_step_rule,
                 }
             )
 
         translator = TranslatorService(task="quiz")
         parsed_questions: list[dict[str, Any]] = []
-        if getattr(translator, "api_key", None):
-            system_prompt = (
-                "You design a small set of distinct Feynman-style teach-back questions for a reader of a serious "
-                "mathematics book. Every question must be answerable in ordinary natural language, typically in 2-6 "
-                "sentences. Never require typing a formula, carrying out a calculation, filling a missing equation, "
-                "reproducing notation, or writing a complete formal proof. Use only claims supported by the supplied "
-                "source. Write in Chinese and do not include answers or expose learning-profile evidence. The questions "
-                "must test meaningfully different concepts, results, proof turns, or connections. Do not repeat or lightly "
-                "paraphrase any previous question. Return strictly valid JSON as {\"questions\": [...]}. Each item must "
-                "contain question_type, question_text, difficulty, target_concepts, expected_points, common_mistakes, "
-                "context_refs, evaluation_rubric, and followup_strategy."
+        system_prompt = (
+            "You design a small set of source-grounded Feynman-style teach-back questions for a reader of a serious "
+            "mathematics book. First identify the exact definition, named result, proof endpoint, construction, or pair "
+            "of related objects in the supplied chapter body that each question will test. Every question must explicitly "
+            "name that source anchor and include enough source-specific detail to be answerable without asking the learner "
+            "to choose a concept, theorem, result, or proof. Never produce prompts such as 'choose an important proof', "
+            "'choose a key theorem', or 'explain the chapter's core concept'. Do not use the chapter title as the only anchor. "
+            "Every question must be answerable in ordinary natural language, typically in 2-6 sentences. Never require "
+            "typing a formula, carrying out a calculation, filling a missing equation, reproducing notation, or writing a "
+            "complete formal proof. Use only claims supported by the supplied source. If a requested question type is not "
+            "supported by the chapter body, use another supported type and report that actual question_type; never invent a "
+            "theorem or proof. Write in Chinese and do not include answers or expose learning-profile evidence. Questions "
+            "must use different source anchors and must not repeat or lightly paraphrase a previous question. Return strictly "
+            "valid JSON as {\"questions\": [...]}; a top-level JSON array is also accepted. Each item must contain "
+            "question_type, question_text, difficulty, target_concepts, expected_points, common_mistakes, and context_refs. "
+            "target_concepts must name the concrete mathematical objects being tested. context_refs must contain a short "
+            "heading, definition/result name, or distinctive source phrase that occurs verbatim in the supplied chapter. "
+            "Use 1-3 concise strings in each array. expected_points must be specific to that source anchor, not generic "
+            "skill criteria. Do not add prose outside the JSON."
+        )
+        user_prompt = (
+            f"{context}\n\n"
+            f"Generate exactly {candidate_count} candidate questions.\n"
+            f"Candidate specifications, in order:\n{json.dumps(type_specs, ensure_ascii=False)}\n\n"
+            f"Previous questions that must not be repeated or lightly paraphrased:\n"
+            f"{json.dumps(old_questions, ensure_ascii=False)}"
+        )
+        if not getattr(translator, "api_key", None):
+            raise QuizGenerationError(
+                "Quiz 出题模型尚未配置。请先在设置中配置可用的 LLM。"
             )
-            user_prompt = (
-                f"{context}\n\n"
-                f"Generate exactly {candidate_count} candidate questions.\n"
-                f"Candidate specifications, in order:\n{json.dumps(type_specs, ensure_ascii=False)}\n\n"
-                f"Previous questions that must not be repeated or lightly paraphrased:\n"
-                f"{json.dumps(old_questions, ensure_ascii=False)}"
-            )
+        validation_details: list[str] = []
+        raw = ""
+        for attempt in range(2):
             try:
-                raw = await translator.complete(user_prompt, system_prompt, temperature=0.55)
+                repair_prompt = ""
+                if validation_details:
+                    repair_prompt = (
+                        "\n\nThe previous response was rejected for these reasons: "
+                        f"{json.dumps(validation_details, ensure_ascii=False)}. Regenerate the full set."
+                    )
+                raw = await translator.complete(
+                    f"{user_prompt}{repair_prompt}",
+                    system_prompt,
+                    temperature=0.35,
+                )
                 parsed = extract_json_candidate(
                     raw,
                     validator=lambda value: (
-                        isinstance(value, dict) and isinstance(value.get("questions"), list)
+                        isinstance(value, list)
+                        or (isinstance(value, dict) and isinstance(value.get("questions"), list))
                     ),
+                    transform=lambda value: {"questions": value} if isinstance(value, list) else value,
                 )
                 parsed_questions = [item for item in parsed["questions"] if isinstance(item, dict)]
+                validation_details = []
+                if len(parsed_questions) != candidate_count:
+                    validation_details.append(
+                        f"expected {candidate_count} questions, received {len(parsed_questions)}"
+                    )
+                for index, item in enumerate(parsed_questions[:candidate_count]):
+                    item_issues = QuizService._candidate_quality_issues(
+                        item,
+                        context,
+                        generic_anchors=(
+                            book.title,
+                            chapter.chapter_index,
+                            chapter.title_zh or "",
+                            chapter.title_en or "",
+                        ),
+                    )
+                    validation_details.extend(
+                        f"question {index + 1}: {issue}" for issue in item_issues
+                    )
+                response_seen = {text.casefold() for text in old_questions}
+                for index, item in enumerate(parsed_questions[:candidate_count]):
+                    question_key = " ".join(
+                        str(item.get("question_text") or item.get("question") or "").split()
+                    ).casefold()
+                    if question_key in response_seen:
+                        validation_details.append(
+                            f"question {index + 1}: repeats a previous or same-batch question"
+                        )
+                    response_seen.add(question_key)
+                if not validation_details:
+                    break
             except Exception as exc:
-                logger.warning("Quiz candidate generation failed: %s", exc)
+                validation_details = [f"{type(exc).__name__}: {exc}"]
+                logger.warning(
+                    "Quiz candidate generation failed attempt=%s provider=%s model=%s response_chars=%s "
+                    "response_preview=%r error=%s",
+                    attempt + 1,
+                    getattr(translator, "provider", "unknown"),
+                    getattr(translator, "model_name", "unknown"),
+                    len(raw),
+                    raw[:400],
+                    exc,
+                )
+        if validation_details:
+            logger.warning("Quiz candidate generation rejected: %s", validation_details)
+            raise QuizGenerationError(f"Quiz 出题失败：{'；'.join(validation_details[:4])}")
 
         normalized_questions: list[dict[str, Any]] = []
         seen_texts = {text.casefold() for text in old_questions}
-        chapter_title = chapter.title_zh or chapter.title_en or chapter.chapter_index
         for index, candidate_type in enumerate(selected_types):
-            raw_data = parsed_questions[index] if index < len(parsed_questions) else {}
+            raw_data = parsed_questions[index]
+            returned_type = raw_data.get("question_type")
+            normalized_type = (
+                canonical_question_type(returned_type)
+                if is_valid_question_type(returned_type)
+                else candidate_type
+            )
             normalized = QuizService.normalize_question_data(
                 raw_data,
                 book_id=book.id,
                 chapter_id=chapter.id,
-                question_type=candidate_type,
+                question_type=normalized_type,
                 quiz_mode=mode,
                 source="book_candidate_batch" if mode == BOOK_QUIZ_MODE else "chapter_candidate_batch",
-            ) if raw_data else QuizService._fallback_question_data(
-                book_id=book.id,
-                chapter_id=chapter.id,
-                chapter_title=chapter_title,
-                question_type=candidate_type,
-                quiz_mode=mode,
-                source="book_candidate_fallback" if mode == BOOK_QUIZ_MODE else "chapter_candidate_fallback",
-                personalization_context=personalization_context,
             )
             normalized_key = " ".join(normalized["question_text"].split()).casefold()
-            if normalized_key in seen_texts and raw_data:
-                normalized = QuizService._fallback_question_data(
-                    book_id=book.id,
-                    chapter_id=chapter.id,
-                    chapter_title=chapter_title,
-                    question_type=candidate_type,
-                    quiz_mode=mode,
-                    source="book_candidate_fallback" if mode == BOOK_QUIZ_MODE else "chapter_candidate_fallback",
-                    personalization_context=personalization_context,
+            if normalized_key in seen_texts:
+                raise QuizGenerationError(
+                    "模型生成了重复题目，未写入题库，请重试。"
                 )
-                normalized_key = " ".join(normalized["question_text"].split()).casefold()
             seen_texts.add(normalized_key)
             normalized_questions.append(normalized)
 
-        questions = [QuizQuestion(**data, times_seen=1, last_seen_at=datetime.utcnow()) for data in normalized_questions]
+        questions = [QuizQuestion(**data, times_seen=0) for data in normalized_questions]
         for question in questions:
             db.add(question)
         await db.commit()
         for question in questions:
             await db.refresh(question)
         return questions
+
+    @staticmethod
+    async def generate_question_candidates(
+        chapter_id: int,
+        *,
+        count: int,
+        quiz_mode: str,
+        question_type: str | None,
+        personalization_context: str | None,
+        previous_questions: list[str] | None,
+        db: AsyncSession,
+        force_generate: bool = False,
+        generation_count: int = DEFAULT_BANK_GENERATION_COUNT,
+    ) -> list[QuizQuestion] | None:
+        """Serve Chapter Quiz from its persistent bank, filling the bank only when needed."""
+        mode = normalize_quiz_mode(quiz_mode)
+        candidate_count = max(1, min(QuizService.MAX_CANDIDATE_COUNT, int(count or 1)))
+        bank_generation_count = max(
+            candidate_count,
+            min(QuizService.MAX_CANDIDATE_COUNT, int(generation_count or 1)),
+        )
+        chapter = await QuizService._chapter_or_none(chapter_id, db)
+        if not chapter:
+            return None
+        book = await QuizService._book_or_none(chapter.book_id, db)
+        if not book:
+            return None
+
+        if mode == BOOK_QUIZ_MODE:
+            generated = await QuizService._generate_and_store_question_candidates(
+                chapter_id,
+                count=candidate_count,
+                quiz_mode=mode,
+                question_type=question_type,
+                personalization_context=personalization_context,
+                previous_questions=previous_questions,
+                db=db,
+            )
+            now = datetime.utcnow()
+            for question in generated:
+                question.times_seen = int(question.times_seen or 0) + 1
+                question.last_seen_at = now
+            await db.commit()
+            for question in generated:
+                await db.refresh(question)
+            return generated
+
+        bank_questions = await QuizService.choose_candidates_from_bank(
+            book_id=book.id,
+            chapter_id=chapter.id,
+            question_type=question_type,
+            quiz_mode=mode,
+            count=candidate_count,
+            previous_questions=previous_questions,
+            db=db,
+            mark_seen=False,
+        )
+        if force_generate or len(bank_questions) < candidate_count:
+            generated = await QuizService._generate_and_store_question_candidates(
+                chapter_id,
+                count=bank_generation_count,
+                quiz_mode=mode,
+                question_type=question_type,
+                personalization_context=None,
+                previous_questions=[
+                    *(previous_questions or []),
+                    *(question.question_text for question in bank_questions),
+                ],
+                db=db,
+            )
+            if force_generate:
+                selected_generated = generated[:candidate_count]
+                now = datetime.utcnow()
+                for question in selected_generated:
+                    question.times_seen = int(question.times_seen or 0) + 1
+                    question.last_seen_at = now
+                await db.commit()
+                for question in selected_generated:
+                    await db.refresh(question)
+                return selected_generated
+
+        return await QuizService.choose_candidates_from_bank(
+            book_id=book.id,
+            chapter_id=chapter.id,
+            question_type=question_type,
+            quiz_mode=mode,
+            count=candidate_count,
+            previous_questions=previous_questions,
+            db=db,
+            mark_seen=True,
+        )
 
     @staticmethod
     async def choose_from_bank(

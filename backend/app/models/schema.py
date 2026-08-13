@@ -152,8 +152,10 @@ class QuizNextRequest(BaseModel):
     quiz_mode: str = "chapter"
     question_type: Optional[str] = None
     personalization_context: Optional[str] = None
-    count: int = Field(default=1, ge=1, le=3)
+    count: int = Field(default=3, ge=1, le=10)
+    generation_count: int = Field(default=6, ge=1, le=10)
     previous_questions: List[str] = Field(default_factory=list, max_length=30)
+    force_generate: bool = False
 
 class QuizAttemptRequest(BaseModel):
     answer_text: str

@@ -381,8 +381,10 @@ export const useBookStore = defineStore('book', {
           quiz_mode: options.quizMode || options.quiz_mode || 'chapter',
           question_type: options.questionType || options.question_type || null,
           personalization_context: options.personalizationContext || options.personalization_context || null,
-          count: options.count || 3,
-          previous_questions: options.previousQuestions || options.previous_questions || []
+          count: options.count || options.candidateCount || undefined,
+          generation_count: options.generationCount || options.generation_count || undefined,
+          previous_questions: options.previousQuestions || options.previous_questions || [],
+          force_generate: Boolean(options.forceGenerate || options.force_generate)
         })
         return Array.isArray(response.data?.questions) ? response.data.questions : []
       } catch (err) {
