@@ -14,8 +14,8 @@ from app.services.settings_service import SettingsService
 
 router = APIRouter()
 
-CONVERSATION_STYLES_PATH = Path(__file__).resolve().parents[3] / "config" / "conversation-styles.json"
-STYLE_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
+QUICK_INPUTS_PATH = Path(__file__).resolve().parents[3] / "config" / "quick-inputs.json"
+QUICK_INPUT_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
 @router.get("/settings")
@@ -82,34 +82,37 @@ async def update_credential(credential_id: str, payload: CredentialUpdateRequest
     }
 
 
-def _normalize_conversation_styles(raw_styles):
-    if not isinstance(raw_styles, list):
-        raise HTTPException(status_code=422, detail="Conversation styles must be a list")
+def _normalize_quick_inputs(raw_inputs):
+    if not isinstance(raw_inputs, list):
+        raise HTTPException(status_code=422, detail="Quick inputs must be a list")
 
     normalized = []
     seen_ids = set()
-    for index, raw_style in enumerate(raw_styles):
-        if not isinstance(raw_style, dict):
-            raise HTTPException(status_code=422, detail=f"Style at index {index} must be an object")
+    for index, raw_input in enumerate(raw_inputs):
+        if not isinstance(raw_input, dict):
+            raise HTTPException(status_code=422, detail=f"Quick input at index {index} must be an object")
+        if set(raw_input) != {"id", "label", "prompt"}:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Quick input at index {index} must contain only id, label, and prompt",
+            )
 
-        style_id = str(raw_style.get("id", "")).strip()
-        label = str(raw_style.get("label", "")).strip()
-        prompt = str(raw_style.get("prompt", "")).strip()
-        description = str(raw_style.get("description", "") or "").strip()
+        input_id = str(raw_input.get("id", "")).strip()
+        label = str(raw_input.get("label", "")).strip()
+        prompt = str(raw_input.get("prompt", "")).strip()
 
-        if not style_id or not label or not prompt:
-            raise HTTPException(status_code=422, detail="Style id, label, and prompt are required")
-        if not STYLE_ID_PATTERN.fullmatch(style_id):
-            raise HTTPException(status_code=422, detail=f"Invalid style id: {style_id}")
-        if style_id in seen_ids:
-            raise HTTPException(status_code=422, detail=f"Duplicate style id: {style_id}")
+        if not input_id or not label or not prompt:
+            raise HTTPException(status_code=422, detail="Quick input id, label, and prompt are required")
+        if not QUICK_INPUT_ID_PATTERN.fullmatch(input_id):
+            raise HTTPException(status_code=422, detail=f"Invalid quick input id: {input_id}")
+        if input_id in seen_ids:
+            raise HTTPException(status_code=422, detail=f"Duplicate quick input id: {input_id}")
 
-        seen_ids.add(style_id)
+        seen_ids.add(input_id)
         normalized.append(
             {
-                "id": style_id,
+                "id": input_id,
                 "label": label,
-                "description": description,
                 "prompt": prompt,
             }
         )
@@ -117,22 +120,22 @@ def _normalize_conversation_styles(raw_styles):
     return normalized
 
 
-@router.get("/settings/conversation-styles")
-async def get_conversation_styles():
-    if not CONVERSATION_STYLES_PATH.exists():
+@router.get("/settings/quick-inputs")
+async def get_quick_inputs():
+    if not QUICK_INPUTS_PATH.exists():
         return []
     try:
-        raw_styles = json.loads(CONVERSATION_STYLES_PATH.read_text(encoding="utf-8"))
+        raw_inputs = json.loads(QUICK_INPUTS_PATH.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
-        raise HTTPException(status_code=500, detail="Conversation styles config is invalid JSON") from exc
-    return _normalize_conversation_styles(raw_styles)
+        raise HTTPException(status_code=500, detail="Quick inputs config is invalid JSON") from exc
+    return _normalize_quick_inputs(raw_inputs)
 
 
-@router.put("/settings/conversation-styles")
-async def update_conversation_styles(styles: list = Body(...)):
-    normalized = _normalize_conversation_styles(styles)
-    CONVERSATION_STYLES_PATH.parent.mkdir(parents=True, exist_ok=True)
-    CONVERSATION_STYLES_PATH.write_text(
+@router.put("/settings/quick-inputs")
+async def update_quick_inputs(inputs: list = Body(...)):
+    normalized = _normalize_quick_inputs(inputs)
+    QUICK_INPUTS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    QUICK_INPUTS_PATH.write_text(
         json.dumps(normalized, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )

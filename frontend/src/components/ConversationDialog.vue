@@ -201,16 +201,16 @@
               <strong>{{ quizTypeLabel }}</strong>
               <span>{{ answerGuidance }}</span>
             </p>
-            <div v-if="!isQuiz" class="dialog-toolbar" aria-label="Response style">
+            <div v-if="!isQuiz" class="dialog-toolbar" aria-label="快捷输入">
               <button
-                v-for="style in responseStyles"
-                :key="style.id"
+                v-for="quickInput in quickInputs"
+                :key="quickInput.id"
                 type="button"
-                :class="{ active: selectedResponseStyleId === style.id }"
-                :title="style.description || style.prompt"
-                @click="toggleResponseStyle(style.id)"
+                :disabled="card.loading"
+                :title="`插入：${quickInput.prompt}`"
+                @click="appendQuickInput(quickInput)"
               >
-                {{ style.label }}
+                {{ quickInput.label }}
               </button>
             </div>
             <div class="input-row">
@@ -238,26 +238,29 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { buildApiUrl } from '../api/client'
 import { copySelectionAsLatex } from '../utils/latexCopy'
+import { appendQuickInputText } from '../utils/quickInput'
 import { deserializeMessages, renderInlineMarkdown, renderMarkdown } from '../utils/renderer'
 
-const DEFAULT_RESPONSE_STYLES = [
+const DEFAULT_QUICK_INPUTS = [
   {
     id: 'cite',
-    label: 'Cite mode',
-    description: 'Answer with concise references to the selected text or current source.',
-    prompt: 'Response style: Cite mode. Anchor the answer in the provided context, quote only short phrases when useful, and point out which part of the source supports each key claim.'
+    label: '引用依据',
+    prompt: '请紧扣当前文本回答，说明每个关键结论来自哪一段上下文；必要时只引用简短原文。'
   },
   {
     id: 'summary',
-    label: 'Summary',
-    description: 'Give a compact summary first, then the minimum needed detail.',
-    prompt: 'Response style: Summary. Start with a concise Chinese summary, then add only the essential mathematical details and definitions needed to understand it.'
+    label: '简要总结',
+    prompt: '请先给出简短总结，再补充理解所需的关键数学细节和定义。'
   },
   {
     id: 'export',
-    label: 'Export',
-    description: 'Format the answer as reusable notes.',
-    prompt: 'Response style: Export. Format the answer as clean reusable study notes in Markdown, with headings, formulas preserved, and no chatty filler.'
+    label: '整理笔记',
+    prompt: '请将回答整理成可复用的 Markdown 学习笔记，保留公式和清晰标题，去掉闲聊内容。'
+  },
+  {
+    id: 'socratic',
+    label: '启发追问',
+    prompt: '请用简短讲解和一到两个有针对性的追问引导我理解，不要一次性给出全部答案。'
   }
 ]
 
@@ -289,8 +292,7 @@ const draft = ref('')
 const dialogRef = ref(null)
 const messagesRef = ref(null)
 const composerRef = ref(null)
-const responseStyles = ref(DEFAULT_RESPONSE_STYLES)
-const selectedResponseStyleId = ref('')
+const quickInputs = ref(DEFAULT_QUICK_INPUTS)
 
 const isQuiz = computed(() => props.mode === 'quiz' || props.card?.type === 'quiz')
 const isSelectionNote = computed(() => !isQuiz.value && props.card?.type === 'selection')
@@ -352,10 +354,6 @@ const displayMessages = computed(() => {
       : []
   }))
 })
-
-const selectedResponseStyle = computed(() => (
-  responseStyles.value.find((style) => style.id === selectedResponseStyleId.value) || null
-))
 
 const isWaitingForFirstToken = computed(() => {
   if (!props.card?.loading) return false
@@ -458,37 +456,38 @@ const submitPrompt = () => {
   const prompt = draft.value.trim()
   if (!prompt || props.card?.loading) return
   draft.value = ''
-  emit('send', {
-    prompt,
-    responseStyleId: selectedResponseStyle.value?.id || '',
-    responseStylePrompt: selectedResponseStyle.value?.prompt || ''
-  })
+  emit('send', prompt)
 }
 
-const normalizeResponseStyles = (rawStyles) => {
-  if (!Array.isArray(rawStyles)) return DEFAULT_RESPONSE_STYLES
-  return rawStyles
-    .map((style) => ({
-      id: String(style?.id || '').trim(),
-      label: String(style?.label || '').trim(),
-      description: String(style?.description || '').trim(),
-      prompt: String(style?.prompt || '').trim()
+const normalizeQuickInputs = (rawInputs) => {
+  if (!Array.isArray(rawInputs)) return DEFAULT_QUICK_INPUTS
+  return rawInputs
+    .map((quickInput) => ({
+      id: String(quickInput?.id || '').trim(),
+      label: String(quickInput?.label || '').trim(),
+      prompt: String(quickInput?.prompt || '').trim()
     }))
-    .filter((style) => style.id && style.label && style.prompt)
+    .filter((quickInput) => quickInput.id && quickInput.label && quickInput.prompt)
 }
 
-const loadResponseStyles = async () => {
+const loadQuickInputs = async () => {
   try {
-    const response = await fetch(buildApiUrl('/config/conversation-styles.json'), { cache: 'no-store' })
-    if (!response.ok) throw new Error('Failed to load response styles')
-    responseStyles.value = normalizeResponseStyles(await response.json())
+    const response = await fetch(buildApiUrl('/config/quick-inputs.json'), { cache: 'no-store' })
+    if (!response.ok) throw new Error('Failed to load quick inputs')
+    quickInputs.value = normalizeQuickInputs(await response.json())
   } catch (_error) {
-    responseStyles.value = DEFAULT_RESPONSE_STYLES
+    quickInputs.value = DEFAULT_QUICK_INPUTS
   }
 }
 
-const toggleResponseStyle = (styleId) => {
-  selectedResponseStyleId.value = selectedResponseStyleId.value === styleId ? '' : styleId
+const appendQuickInput = (quickInput) => {
+  draft.value = appendQuickInputText(draft.value, quickInput?.prompt)
+  nextTick(() => {
+    const composer = composerRef.value
+    if (!composer) return
+    composer.focus()
+    composer.setSelectionRange(draft.value.length, draft.value.length)
+  })
 }
 
 watch(() => props.card?.id, () => {
@@ -503,7 +502,7 @@ watch(draft, resizeComposer, { flush: 'post' })
 onMounted(() => {
   resetDraft()
   syncMessageScroll()
-  loadResponseStyles()
+  loadQuickInputs()
   document.addEventListener('copy', handleLatexCopy)
 })
 
@@ -1459,10 +1458,9 @@ onUnmounted(() => {
   color: #20252b;
 }
 
-.dialog-toolbar button.active {
-  border-color: var(--dialog-blue-200);
-  background: var(--dialog-blue-50);
-  color: var(--dialog-blue-800);
+.dialog-toolbar button:disabled {
+  cursor: default;
+  opacity: 0.55;
 }
 
 .input-row {

@@ -7,8 +7,8 @@ const currentDir = dirname(fileURLToPath(import.meta.url))
 const source = readFileSync(resolve(currentDir, 'Library.vue'), 'utf8')
 const storeSource = readFileSync(resolve(currentDir, '../stores/bookStore.js'), 'utf8')
 
-assert.match(source, />\s*回复风格\s*</, 'Library preferences should expose localized response styles')
-assert.match(source, /title="管理回复风格"/, 'Library response style button should describe its action')
+assert.match(source, />\s*快捷输入\s*</, 'Library preferences should expose localized quick inputs')
+assert.match(source, /title="管理快捷输入"/, 'Library quick-input button should describe its action')
 assert.match(source, />\s*偏好设置\s*/, 'Library should use a concise name for the preferences menu')
 assert.match(source, />\s*模型与存储\s*</, 'Library should name application settings by their contents')
 assert.doesNotMatch(source, /AI Author|Agent Console|AgentConsole|handleStartAgent|showConsole/, 'Library should not expose the retired authoring workflow')
@@ -42,4 +42,4 @@ assert.match(source, /return isTranslating\(book\)/, 'Library should only show t
 assert.match(source, /requestDeleteBook/, 'Library should use an in-app delete confirmation flow')
 assert.doesNotMatch(source, /\b(?:alert|confirm)\s*\(/, 'Library should not use blocking browser alert or confirm dialogs')
 
-console.log('Library response style entry point ok')
+console.log('Library quick input entry point ok')

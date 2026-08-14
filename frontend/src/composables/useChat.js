@@ -90,26 +90,10 @@ export function useChat() {
         })
     }
 
-    const appendResponseStylePrompt = (content, stylePrompt = '') => {
-        const prompt = String(stylePrompt || '').trim()
-        if (!prompt) return content
-        return `${content}\n\n${prompt}`
-    }
-
-    const buildHistory = (messages, requestOptions = {}) => {
-        const lastUserIndex = messages.reduce((lastIndex, message, index) => (
-            message.role === 'user' ? index : lastIndex
-        ), -1)
-
-        return messages.map((message, index) => {
-            return {
-                role: message.role,
-                content: index === lastUserIndex
-                    ? appendResponseStylePrompt(message.content, requestOptions.responseStylePrompt)
-                    : message.content
-            }
-        })
-    }
+    const buildHistory = (messages) => messages.map((message) => ({
+        role: message.role,
+        content: message.content
+    }))
 
     const normalizeMessages = (rawMessages) => {
         return deserializeMessages(rawMessages)
@@ -209,9 +193,7 @@ export function useChat() {
         syncCardMessages(card)
         const shouldCreateNote = !card.noteId && card.bookId && card.sourceType && card.sourceId
         const firstMessageNoteContent = card.noteContent
-        const history = buildHistory(messages, {
-            responseStylePrompt: options.responseStylePrompt
-        })
+        const history = buildHistory(messages)
         card.loading = true
         const assistantIndex = messages.push({ role: 'assistant', content: '' }) - 1
         syncCardMessages(card)

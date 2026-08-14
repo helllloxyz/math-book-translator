@@ -2089,7 +2089,7 @@
   background: var(--color-accent-soft);
 }
 
-/* Settings and response-style editors */
+/* Settings and quick-input editors */
 #app .modal-content {
   --modal-ink: var(--color-ink);
   --modal-muted: var(--color-muted);
@@ -2212,11 +2212,11 @@
   color: var(--color-muted);
 }
 
-#app .style-list {
+#app .quick-input-list {
   scrollbar-gutter: stable;
 }
 
-#app .style-item {
+#app .quick-input-item {
   padding: 0.9rem;
   border-color: var(--color-line);
   border-radius: var(--radius-md);

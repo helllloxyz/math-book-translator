@@ -3,42 +3,37 @@
     <div class="modal-content card">
       <div class="modal-header">
         <div>
-          <p class="modal-kicker">对话偏好</p>
-          <h2>回复风格</h2>
+          <p class="modal-kicker">对话工具</p>
+          <h2>快捷输入</h2>
         </div>
         <button class="close-btn" @click="$emit('close')" title="关闭" aria-label="关闭">×</button>
       </div>
       
       <div class="modal-body">
         <p class="description">
-          管理阅读对话中可复用的回复风格。选中的风格只会应用到本次发送给 AI 的最新消息。
+          点击对话框中的按钮，即可把对应内容追加到当前输入。发送后，这些内容会随消息保留在对话记录中。
         </p>
 
         <div v-if="error" class="error-message">{{ error }}</div>
-        <div v-if="loading" class="loading-message">正在加载回复风格…</div>
+        <div v-if="loading" class="loading-message">正在加载快捷输入…</div>
 
-        <div v-else class="style-list">
-          <div v-for="(style, index) in styles" :key="index" class="style-item">
-            <div class="style-fields">
-              <input 
-                v-model="style.id" 
-                placeholder="style-id" 
+        <div v-else class="quick-input-list">
+          <div v-for="(quickInput, index) in quickInputs" :key="index" class="quick-input-item">
+            <div class="quick-input-fields">
+              <input
+                v-model="quickInput.id"
+                placeholder="input-id"
                 class="modal-input id-input"
               />
-              <input 
-                v-model="style.label" 
+              <input
+                v-model="quickInput.label"
                 placeholder="显示名称"
                 class="modal-input label-input"
               />
-              <button class="remove-btn" @click="removeStyle(index)" title="删除风格" :aria-label="`删除第 ${index + 1} 个回复风格`">×</button>
-              <input
-                v-model="style.description"
-                placeholder="风格说明"
-                class="modal-input description-input"
-              />
+              <button class="remove-btn" @click="removeQuickInput(index)" title="删除快捷输入" :aria-label="`删除第 ${index + 1} 个快捷输入`">×</button>
               <textarea
-                v-model="style.prompt"
-                placeholder="回复风格提示词…"
+                v-model="quickInput.prompt"
+                placeholder="点击后追加到输入框的内容…"
                 class="modal-input prompt-input"
                 rows="3"
               ></textarea>
@@ -46,14 +41,14 @@
           </div>
         </div>
 
-        <button type="button" class="add-btn" @click="addStyle">
-          <span class="icon">+</span> 添加风格
+        <button type="button" class="add-btn" @click="addQuickInput">
+          <span class="icon">+</span> 添加快捷输入
         </button>
 
         <div class="form-actions">
           <button type="button" class="cancel-btn" @click="$emit('close')">取消</button>
-          <button type="button" class="save-btn primary-btn" :disabled="saving" @click="saveStyles">
-            {{ saving ? '正在保存…' : '保存风格' }}
+          <button type="button" class="save-btn primary-btn" :disabled="saving" @click="saveQuickInputs">
+            {{ saving ? '正在保存…' : '保存快捷输入' }}
           </button>
         </div>
       </div>
@@ -71,30 +66,29 @@ const props = defineProps({
 
 const emit = defineEmits(['close', 'save'])
 
-const styles = ref([])
+const quickInputs = ref([])
 const loading = ref(false)
 const saving = ref(false)
 const error = ref('')
 
-const normalizeStyles = (rawStyles) => {
-  return Array.isArray(rawStyles)
-    ? rawStyles.map(style => ({
-        id: style?.id || '',
-        label: style?.label || '',
-        description: style?.description || '',
-        prompt: style?.prompt || ''
+const normalizeQuickInputs = (rawInputs) => {
+  return Array.isArray(rawInputs)
+    ? rawInputs.map(quickInput => ({
+        id: quickInput?.id || '',
+        label: quickInput?.label || '',
+        prompt: quickInput?.prompt || ''
       }))
     : []
 }
 
-const loadStyles = async () => {
+const loadQuickInputs = async () => {
   loading.value = true
   error.value = ''
   try {
-    const response = await apiClient.get('/settings/conversation-styles')
-    styles.value = normalizeStyles(response.data)
+    const response = await apiClient.get('/settings/quick-inputs')
+    quickInputs.value = normalizeQuickInputs(response.data)
   } catch (err) {
-    error.value = err?.response?.data?.detail || err.message || '回复风格加载失败'
+    error.value = err?.response?.data?.detail || err.message || '快捷输入加载失败'
   } finally {
     loading.value = false
   }
@@ -103,35 +97,34 @@ const loadStyles = async () => {
 watch(
   () => props.show,
   (visible) => {
-    if (visible) loadStyles()
+    if (visible) loadQuickInputs()
   },
   { immediate: true }
 )
 
-const addStyle = () => {
-  styles.value.push({ id: '', label: '', description: '', prompt: '' })
+const addQuickInput = () => {
+  quickInputs.value.push({ id: '', label: '', prompt: '' })
 }
 
-const removeStyle = (index) => {
-  styles.value.splice(index, 1)
+const removeQuickInput = (index) => {
+  quickInputs.value.splice(index, 1)
 }
 
-const saveStyles = async () => {
+const saveQuickInputs = async () => {
   saving.value = true
   error.value = ''
   try {
-    const payload = styles.value.map(style => ({
-      id: style.id,
-      label: style.label,
-      description: style.description,
-      prompt: style.prompt
+    const payload = quickInputs.value.map(quickInput => ({
+      id: quickInput.id,
+      label: quickInput.label,
+      prompt: quickInput.prompt
     }))
-    const response = await apiClient.put('/settings/conversation-styles', payload)
-    styles.value = normalizeStyles(response.data)
-    emit('save', styles.value)
+    const response = await apiClient.put('/settings/quick-inputs', payload)
+    quickInputs.value = normalizeQuickInputs(response.data)
+    emit('save', quickInputs.value)
     emit('close')
   } catch (err) {
-    error.value = err?.response?.data?.detail || err.message || '回复风格保存失败'
+    error.value = err?.response?.data?.detail || err.message || '快捷输入保存失败'
   } finally {
     saving.value = false
   }
@@ -238,14 +231,14 @@ const saveStyles = async () => {
   line-height: 1.5;
 }
 
-.style-list {
+.quick-input-list {
   max-height: 440px;
   overflow-y: auto;
   margin-bottom: 1rem;
   padding-right: 0.35rem;
 }
 
-.style-item {
+.quick-input-item {
   margin-bottom: 1rem;
   padding: 0.9rem;
   border: 1px solid var(--modal-line);
@@ -255,14 +248,13 @@ const saveStyles = async () => {
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
 }
 
-.style-fields {
+.quick-input-fields {
   display: grid;
   grid-template-columns: minmax(110px, 0.8fr) minmax(160px, 1fr) 32px;
   gap: 0.5rem;
   align-items: start;
 }
 
-.description-input,
 .prompt-input {
   grid-column: 1 / -1;
 }
@@ -416,7 +408,7 @@ const saveStyles = async () => {
     padding: 1rem;
   }
 
-  .style-fields {
+  .quick-input-fields {
     grid-template-columns: minmax(0, 1fr) 32px;
   }
 

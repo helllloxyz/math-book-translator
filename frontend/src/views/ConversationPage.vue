@@ -79,12 +79,10 @@ const updateTitle = () => {
   document.title = buildConversationDocumentTitle(card.value, metadata.value)
 }
 
-const handleSend = async (payload) => {
+const handleSend = async (prompt) => {
   if (!card.value) return
-  const prompt = typeof payload === 'string' ? payload : payload?.prompt
   if (!prompt) return
   await streamCardChat(card.value, prompt, contextText.value, {
-    responseStylePrompt: typeof payload === 'string' ? '' : payload?.responseStylePrompt,
     onUpdate: (updatedCard) => {
       persist(updatedCard)
       updateTitle()

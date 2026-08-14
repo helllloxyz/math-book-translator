@@ -24,8 +24,8 @@
             <span class="menu-chevron" aria-hidden="true">⌄</span>
           </button>
           <div v-if="headerToolsOpen" class="action-menu header-tools-menu" role="menu">
-            <button class="menu-item response-styles-btn" role="menuitem" @click="showResponseStyles = true; closeMenus()" title="管理回复风格">
-              回复风格
+            <button class="menu-item quick-inputs-btn" role="menuitem" @click="showQuickInputs = true; closeMenus()" title="管理快捷输入">
+              快捷输入
             </button>
             <button class="menu-item settings-btn" role="menuitem" @click="showSettings = true; closeMenus()" title="配置模型与存储">
               模型与存储
@@ -234,10 +234,10 @@
       @save="onSaveSettings"
     />
 
-    <MacroSettingsModal
-      :show="showResponseStyles"
-      @close="showResponseStyles = false"
-      @save="onSaveResponseStyles"
+    <QuickInputSettingsModal
+      :show="showQuickInputs"
+      @close="showQuickInputs = false"
+      @save="onSaveQuickInputs"
     />
 
   </div>
@@ -249,14 +249,14 @@ import { useBookStore } from '../stores/bookStore'
 import { renderMath } from '../utils/renderer'
 import ImportModal from '../components/ImportModal.vue'
 import SettingsModal from '../components/SettingsModal.vue'
-import MacroSettingsModal from '../components/MacroSettingsModal.vue'
+import QuickInputSettingsModal from '../components/QuickInputSettingsModal.vue'
 import { extractImportPreflight, formatImportErrorMessage } from '../utils/importPreflight'
 import { formatLibraryBookTitle } from '../utils/bookTitle'
 
 const bookStore = useBookStore()
 const showImport = ref(false)
 const showSettings = ref(false)
-const showResponseStyles = ref(false)
+const showQuickInputs = ref(false)
 const headerToolsOpen = ref(false)
 const openBookMenuId = ref(null)
 const uploading = ref(false)
@@ -598,9 +598,9 @@ const onSaveSettings = (settings) => {
   showNotification('设置已保存', 'success')
 }
 
-const onSaveResponseStyles = (styles) => {
-  console.log("Response styles saved:", styles)
-  showNotification('回复风格已保存', 'success')
+const onSaveQuickInputs = (quickInputs) => {
+  console.log("Quick inputs saved:", quickInputs)
+  showNotification('快捷输入已保存', 'success')
 }
 
 const startEditing = (book) => {
