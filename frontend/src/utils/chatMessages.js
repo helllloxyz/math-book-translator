@@ -1,3 +1,5 @@
+import { sanitizeSuggestedQuestions } from './chatSuggestions.js'
+
 const CHAT_BLOCK_RE = /<div\s+class="(chat-user|chat-ai)">([\s\S]*?)<\/div>/gi
 
 const sanitizeRole = (role) => role === 'user' ? 'user' : 'assistant'
@@ -22,10 +24,17 @@ const stripTags = (value = '') => {
 const sanitizeMessages = (messages) => {
     if (!Array.isArray(messages)) return []
     return messages
-        .map((message) => ({
-            role: sanitizeRole(message?.role),
-            content: String(message?.content || '')
-        }))
+        .map((message) => {
+            const role = sanitizeRole(message?.role)
+            const suggestedQuestions = role === 'assistant'
+                ? sanitizeSuggestedQuestions(message?.suggestedQuestions)
+                : []
+            return {
+                role,
+                content: String(message?.content || ''),
+                ...(suggestedQuestions.length ? { suggestedQuestions } : {})
+            }
+        })
 }
 
 const parseLegacyHtmlMessages = (content) => {

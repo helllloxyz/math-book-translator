@@ -15,6 +15,8 @@ assert.match(source, /mode:\s*card\.type === 'quiz' \? 'quiz' : 'chat'/, 'card c
 assert.match(source, /firstMessageNoteContent/, 'note creation should keep the original user message content for persistence')
 assert.match(source, /createTypewriterQueue/, 'stream chunks should flow through a response-level frontend typewriter queue')
 assert.match(source, /consumeStreamWithTypewriter/, 'both chat paths should read the response independently from their visible typewriter pace')
+assert.match(source, /extractSuggestedQuestions/, 'completed chat streams should extract model-generated follow-up questions')
+assert.match(source, /finalizeAssistantResponse/, 'suggested questions should be stored separately from the visible answer')
 assert.match(source, /const assistantIndex = messages\.push/, 'streaming should update the assistant message through the reactive messages array')
 assert.match(source, /messages\[assistantIndex\] = \{/, 'stream chunks should replace the assistant array entry to trigger UI updates')
 assert.match(source, /card\.type === 'quiz' && card\.questionId/, 'structured quiz cards should submit answers to the attempts endpoint')

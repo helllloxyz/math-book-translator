@@ -2,6 +2,7 @@ import { ref } from 'vue'
 import { apiClient, buildApiUrl } from '../api/client'
 import { deserializeMessages, serializeMessages } from '../utils/renderer'
 import { createTypewriterQueue } from '../utils/typewriterStream'
+import { extractSuggestedQuestions } from '../utils/chatSuggestions'
 
 const QUIZ_METADATA_KEY = 'quizQuestion'
 
@@ -158,6 +159,16 @@ export function useChat() {
         afterAppend?.()
     }
 
+    const finalizeAssistantResponse = (messages, assistantIndex, afterUpdate) => {
+        const currentAssistant = messages[assistantIndex] || { role: 'assistant', content: '' }
+        const parsed = extractSuggestedQuestions(currentAssistant.content)
+        messages[assistantIndex] = {
+            ...currentAssistant,
+            ...parsed
+        }
+        afterUpdate?.()
+    }
+
     const consumeStreamWithTypewriter = async (response, append) => {
         const reader = response.body.getReader()
         const decoder = new TextDecoder()
@@ -280,6 +291,10 @@ export function useChat() {
                     options.onUpdate?.(card)
                 })
             })
+            finalizeAssistantResponse(messages, assistantIndex, () => {
+                syncCardMessages(card)
+                options.onUpdate?.(card)
+            })
         } catch (err) {
             const currentAssistant = messages[assistantIndex] || { role: 'assistant', content: '' }
             messages[assistantIndex] = {
@@ -391,6 +406,9 @@ export function useChat() {
                 appendAssistantContent(messages, assistantIndex, visibleChunk, () => {
                     syncNoteMessages(note)
                 })
+            })
+            finalizeAssistantResponse(messages, assistantIndex, () => {
+                syncNoteMessages(note)
             })
         } catch (err) {
             const currentAssistant = messages[assistantIndex] || { role: 'assistant', content: '' }

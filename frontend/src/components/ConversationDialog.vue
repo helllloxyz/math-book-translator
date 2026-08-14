@@ -178,9 +178,8 @@
                         :key="question"
                         type="button"
                         @click="draft = question"
-                      >
-                        {{ question }}
-                      </button>
+                        v-html="renderInlineMarkdown(question)"
+                      ></button>
                     </div>
                   </section>
                 </template>
@@ -239,7 +238,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { buildApiUrl } from '../api/client'
 import { copySelectionAsLatex } from '../utils/latexCopy'
-import { deserializeMessages, renderMarkdown } from '../utils/renderer'
+import { deserializeMessages, renderInlineMarkdown, renderMarkdown } from '../utils/renderer'
 
 const DEFAULT_RESPONSE_STYLES = [
   {
@@ -337,15 +336,12 @@ const sourceCount = computed(() => {
 })
 
 const suggestedQuestionsFor = (message) => {
-  if (message.role !== 'assistant') return []
-  const sourceTitle = props.card?.sourceTitle || props.metadataInfo?.sourceTitle || '这一节'
-  if (isQuiz.value) {
-    return []
-  }
-  if (isSelectionNote.value) {
-    return ['这段话的关键假设是什么？', '能用一个例子说明吗？', '它和前面的定义如何连接？']
-  }
-  return [`${sourceTitle} 的核心结论是什么？`, '这里最容易误解的点是什么？', '后续证明会用到哪一步？']
+  if (message.role !== 'assistant' || isQuiz.value) return []
+  if (!Array.isArray(message.suggestedQuestions)) return []
+  return message.suggestedQuestions
+    .map(question => String(question || '').trim())
+    .filter(Boolean)
+    .slice(0, 3)
 }
 
 const displayMessages = computed(() => {

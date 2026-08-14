@@ -46,6 +46,10 @@ export const renderMarkdown = (content, book) => {
     return html
 }
 
+export const renderInlineMarkdown = (content) => (
+    md.renderInline(normalizeMathDelimiters(content || ''))
+)
+
 export const renderMath = (element) => {
     const mathOptions = {
         delimiters: [

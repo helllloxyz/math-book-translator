@@ -14,12 +14,13 @@ The repo also contains the DeepTree Author agent workflow for generated mathemat
 
 ## Run And Verify
 
-- Full local app: `./install.sh`, then `cp backend/.env.example backend/.env`, then `./run.sh`.
+- Use the repository's Node 22 runtime through mise for all Node-dependent commands: `mise exec node@22 -- <command>`.
+- Full local app: `./install.sh`, then `cp backend/.env.example backend/.env`, then `mise exec node@22 -- ./run.sh`.
 - Backend only: `cd backend && source .venv/bin/activate && alembic upgrade head && uvicorn app.main:app --reload`.
-- Frontend only: `cd frontend && npm run dev`.
+- Frontend only: `cd frontend && mise exec node@22 -- npm run dev`.
 - Backend tests: `cd backend && source .venv/bin/activate && pytest`.
-- Frontend build: `cd frontend && npm run build`.
-- Frontend tests are plain Node scripts: run individual `*.test.mjs` files with `node`, for example `cd frontend && node src/utils/readerTree.test.mjs`.
+- Frontend build: `cd frontend && mise exec node@22 -- npm run build`.
+- Frontend tests are plain Node scripts: run individual `*.test.mjs` files through mise, for example `cd frontend && mise exec node@22 -- node src/utils/readerTree.test.mjs`.
 
 `run.sh` applies Alembic migrations by default. Use `RUN_DB_MIGRATIONS=0 ./run.sh` to skip, or `DB_MIGRATION_MODE=check ./run.sh` to make app startup verify the database revision.
 

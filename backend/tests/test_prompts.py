@@ -15,6 +15,15 @@ def test_prompt_registry_exposes_versioned_core_prompts():
     assert "quiz" in quiz.system.lower()
 
 
+def test_reader_chat_prompt_requests_markdown_suggested_questions():
+    prompt = PromptRegistry.get(PromptId.READER_CHAT)
+
+    assert prompt.version == "v2"
+    assert "<!--SUGGESTED_QUESTIONS-->" in prompt.system
+    assert "Markdown bullet list of three" in prompt.system
+    assert "same language as the user's latest question" in prompt.system
+
+
 def test_translation_prompt_requests_bold_structural_math_labels_only():
     prompt = PromptRegistry.get(PromptId.TRANSLATE_CHAPTER).system
 

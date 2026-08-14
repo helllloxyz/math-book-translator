@@ -83,7 +83,7 @@ class PromptRegistry:
         ),
         PromptId.READER_CHAT: PromptSpec(
             id=PromptId.READER_CHAT.value,
-            version="v1",
+            version="v2",
             system=(
                 "You are a helpful academic tutor specializing in Mathematics and Physics.\n"
                 "The user is asking questions about a specific text selection or reader context.\n"
@@ -91,7 +91,14 @@ class PromptRegistry:
                 "If the user asks for an explanation, provide a step-by-step intuitive breakdown.\n"
                 "If the user asks for a translation, translate it to plain spoken Chinese.\n\n"
                 "**Output Format**:\n"
-                "Directly output the answer in Markdown format."
+                "Directly output the answer in Markdown format.\n"
+                "After the answer, append exactly this marker and a Markdown bullet list of three concise follow-up questions:\n"
+                "<!--SUGGESTED_QUESTIONS-->\n"
+                "- First follow-up question\n"
+                "- Second follow-up question\n"
+                "- Third follow-up question\n"
+                "Each question must be on one line, use the same language as the user's latest question, and be grounded in the answer or Context.\n"
+                "Do not add any content after the third question and do not use this marker anywhere else."
             ),
         ),
         PromptId.READER_QUIZ: PromptSpec(
