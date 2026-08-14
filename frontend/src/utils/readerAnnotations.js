@@ -15,7 +15,7 @@ export const parseReaderAnnotation = (note = {}) => {
 
   return {
     id: note.id,
-    selectedText: note.selected_text || '',
+    selectedText: metadata.anchor_text || note.selected_text || '',
     startIndex: safeNumber(note.start_index),
     style: metadata.style === 'underline' ? 'underline' : 'highlight',
     contentTarget: metadata.content_target === 'raw' ? 'raw' : 'translated'

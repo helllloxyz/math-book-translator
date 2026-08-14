@@ -273,7 +273,8 @@ export const useBookStore = defineStore('book', {
             : (annotation.start_index || 0),
           note_content: JSON.stringify({
             style: annotation.style === 'underline' ? 'underline' : 'highlight',
-            content_target: annotation.contentTarget || annotation.content_target || 'translated'
+            content_target: annotation.contentTarget || annotation.content_target || 'translated',
+            anchor_text: annotation.anchorText || annotation.anchor_text || annotation.selectedText || annotation.selected_text || ''
           }),
           title: null,
           type: 'annotation'

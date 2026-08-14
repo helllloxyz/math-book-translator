@@ -17,6 +17,7 @@ assert.match(source, /async exportBookPackage\(bookId,\s*filename\)/, 'book stor
 assert.match(source, /apiClient\.get\(`\/books\/\$\{bookId\}\/export`/, 'book package export should use the export endpoint')
 assert.match(source, /responseType:\s*'blob'/, 'book package export should request a blob download')
 assert.match(source, /fetchNextQuizQuestion/, 'book store should fetch structured chapter quiz questions')
+assert.match(source, /anchor_text:\s*annotation\.anchorText/, 'reader annotations should persist a separate DOM anchor from their display text')
 assert.match(source, /fetchQuizCandidates/, 'book store should fetch a candidate question pool')
 assert.match(source, /`\/chapters\/\$\{chapterId\}\/quiz\/candidates`/, 'candidate pools should use the batch Quiz endpoint')
 assert.match(source, /previous_questions:\s*options\.previousQuestions/, 'candidate requests should send prior question text for deduplication')

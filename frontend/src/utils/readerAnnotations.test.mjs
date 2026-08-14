@@ -30,4 +30,13 @@ assert.deepEqual(
   }
 )
 
+assert.equal(
+  parseReaderAnnotation({
+    selected_text: '$\\mathbb{R}^n$',
+    note_content: JSON.stringify({ anchor_text: 'Rn\\mathbb{R}^nRn' })
+  }).selectedText,
+  'Rn\\mathbb{R}^nRn',
+  'annotations should use the DOM anchor for source highlighting while preserving display LaTeX'
+)
+
 console.log('reader annotation persistence helpers ok')

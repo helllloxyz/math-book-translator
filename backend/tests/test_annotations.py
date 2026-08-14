@@ -8,7 +8,7 @@ from app.routers.legacy import create_note, get_book_notes, get_source_notes
 
 
 @pytest.mark.asyncio
-async def test_annotation_round_trips_with_source_notes_and_stays_out_of_notes_page():
+async def test_annotation_round_trips_with_source_and_book_notes():
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     sessions = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
     async with engine.begin() as connection:
@@ -55,6 +55,6 @@ async def test_annotation_round_trips_with_source_notes_and_stays_out_of_notes_p
             assert [note.id for note in source_notes] == [created.id]
 
             visible_notes = await get_book_notes(book.id, db=session)
-            assert visible_notes == []
+            assert [note.id for note in visible_notes] == [created.id]
     finally:
         await engine.dispose()

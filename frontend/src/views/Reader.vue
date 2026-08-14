@@ -605,7 +605,8 @@ const applySavedAnnotations = async () => {
 
 const createReaderAnnotation = async (style, fallbackText, options = {}) => {
   const subject = currentToolSubject.value
-  const selectedText = options.anchorText || fallbackText
+  const selectedText = fallbackText || options.anchorText || ''
+  const anchorText = options.anchorText || selectedText
   if (!subject || !selectedText.trim()) return
 
   try {
@@ -616,6 +617,7 @@ const createReaderAnnotation = async (style, fallbackText, options = {}) => {
       sourceId: subject.sourceId,
       sourceTitle: subject.sourceTitle,
       selectedText,
+      anchorText,
       startIndex: options.startIndex || 0,
       contentTarget: options.contentTarget || 'translated',
       style

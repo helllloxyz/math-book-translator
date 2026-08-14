@@ -1763,14 +1763,16 @@
 }
 
 #app .source-btn {
+  width: 30px;
+  height: 30px;
   min-height: 30px;
-  padding: 0.35rem 0.55rem;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
   border: 1px solid var(--color-line);
   border-radius: var(--radius-xs);
   color: var(--color-muted);
   background: var(--color-surface-raised);
-  font-size: 0.68rem;
-  font-weight: 600;
 }
 
 #app .source-btn:hover {

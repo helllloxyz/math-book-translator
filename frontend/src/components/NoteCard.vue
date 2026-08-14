@@ -6,8 +6,19 @@
           <span class="note-title">{{ note.title || '未命名笔记' }}</span>
       </div>
       <div class="header-right">
-          <span class="note-date" v-if="note.created_at && !isCollapsed">{{ formatDate(note.created_at) }}</span>
-          <button v-if="note.chapter_id" type="button" class="source-btn" title="返回对应章节" @click.stop="emit('open-source')">返回原文</button>
+          <span class="note-date" v-if="note.created_at">{{ formatDate(note.created_at) }}</span>
+          <button
+            v-if="note.chapter_id"
+            type="button"
+            class="source-btn"
+            title="在新标签页打开原文"
+            aria-label="在新标签页打开原文"
+            @click.stop="emit('open-source')"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M14 5h5v5M19 5l-8 8M18 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" />
+            </svg>
+          </button>
           <button type="button" @click.stop="emit('delete')" class="delete-btn" title="删除笔记">×</button>
       </div>
     </div>
@@ -186,6 +197,7 @@ onMounted(() => {
 .collapse-icon { font-size: 0.6rem; color: #aaa; }
 .note-title { font-weight: 600; color: #333; }
 .header-right { display: flex; align-items: center; gap: 0.5rem; }
+.source-btn svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
 .delete-btn { background: none; border: none; font-size: 1.2rem; cursor: pointer; color: #999; line-height: 1; padding: 0; }
 .delete-btn:hover { color: #f44336; }
 
