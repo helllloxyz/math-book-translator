@@ -9,19 +9,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from app.logging_config import configure_logging
 from app.models.base import engine
 from app.routers import books, chapters, chat, guides, legacy, quiz, settings
 from app.services.book_storage import BookStorage
 from app.services.settings_service import SettingsService
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    handlers=[
-        logging.FileHandler("backend_debug.log"),
-        logging.StreamHandler(sys.stdout),
-    ],
-)
+configure_logging()
 logger = logging.getLogger("app")
 
 
@@ -88,15 +82,15 @@ def _assert_database_is_current(connection) -> None:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    logger.info("Starting up application...")
     SettingsService.load_settings()
     migration_mode = _migration_mode()
     if migration_mode == "check":
         async with engine.connect() as conn:
             await conn.run_sync(_assert_database_is_current)
-        logger.info("Database migration state verified.")
+        logger.debug("Database migration state verified.")
     else:
-        logger.info("Database migration check skipped (DB_MIGRATION_MODE=%s).", migration_mode)
+        logger.debug("Database migration check skipped (DB_MIGRATION_MODE=%s).", migration_mode)
+    logger.info("Math Book Translator backend is ready.")
     yield
 
 

@@ -112,7 +112,7 @@ class TranslatorService:
             raise LLMConfigurationError(error)
 
     def _log_request(self, operation: str, *, system_prompt: str, user_prompt: str) -> None:
-        logger.info(
+        logger.debug(
             "LLM request operation=%s provider=%s client_type=%s model=%s system_chars=%s user_chars=%s",
             operation,
             self.provider,
@@ -123,7 +123,7 @@ class TranslatorService:
         )
 
     def _log_response(self, operation: str, content: str) -> None:
-        logger.info(
+        logger.debug(
             "LLM response operation=%s provider=%s client_type=%s model=%s response_chars=%s",
             operation,
             self.provider,
@@ -163,7 +163,7 @@ class TranslatorService:
 
         system_prompt = PromptRegistry.get(PromptId.TRANSLATE_CHAPTER).system
 
-        logger.info(
+        logger.debug(
             "Translating chunk provider=%s model=%s chars=%s",
             self.provider,
             self.model_name,

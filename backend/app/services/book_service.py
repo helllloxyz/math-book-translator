@@ -374,7 +374,7 @@ class BookService:
         meta_path = Path(book_dir) / "meta.json"
         try:
             meta_path.write_text(json.dumps(meta, indent=2, ensure_ascii=False), encoding="utf-8")
-            logger.info(f"Saved meta.json for book {book.title}")
+            logger.debug("Saved meta.json for book %s", book.title)
         except Exception as e:
             logger.error(f"Failed to save meta.json: {e}")
 
@@ -399,7 +399,7 @@ class BookService:
 
     @staticmethod
     async def import_preprocessed_book(source_dir: str, meta_path: str, db: AsyncSession):
-        logger.info(f"Importing preprocessed book from {source_dir}")
+        logger.debug("Importing preprocessed book from %s", source_dir)
         source_dir_path = Path(source_dir)
         try:
             content = Path(meta_path).read_text(encoding="utf-8")
@@ -751,7 +751,7 @@ class BookService:
         async def run_chapter(chapter):
             nonlocal completed, failed
             async with semaphore:
-                logger.info("Translating Chapter %s", chapter.chapter_index)
+                logger.debug("Translating chapter %s", chapter.chapter_index)
                 success = await BookService._translate_one_chapter(book, chapter, translator)
 
             async with progress_lock:
@@ -779,7 +779,7 @@ class BookService:
 
     @staticmethod
     async def process_book_translation(book_id: int):
-        logger.info(f"Background task started for Book ID: {book_id}")
+        logger.debug("Translation background task started for book ID %s", book_id)
         lock = BookService._translation_locks.setdefault(book_id, asyncio.Lock())
         if lock.locked():
             logger.info("Translation task already running for Book ID: %s", book_id)
@@ -805,6 +805,12 @@ class BookService:
                 book.translation_total = initial_plan.total
                 book.translation_completed = initial_plan.completed
                 book.translation_failed = initial_plan.failed
+                logger.info(
+                    "Translation started: %s (%s/%s chapters complete)",
+                    book.title,
+                    initial_plan.completed,
+                    initial_plan.total,
+                )
                 if not initial_plan.pending:
                     if initial_plan.total:
                         guide_translator = TranslatorService(task="guides")
@@ -815,6 +821,7 @@ class BookService:
                     else:
                         book.status = BookStatus.loaded
                     await session.commit()
+                    logger.info("Translation complete: %s", book.title)
                     return
 
                 translator = TranslatorService(task="translation")
@@ -826,6 +833,13 @@ class BookService:
                     book.translation_total = total
                     book.translation_failed = failed
                     await session.commit()
+                    logger.info(
+                        "Translation progress: %s (%s/%s chapters, %s failed)",
+                        book.title,
+                        completed,
+                        total,
+                        failed,
+                    )
 
                 final_plan = await BookService.translate_pending_chapters(
                     book,
@@ -845,6 +859,14 @@ class BookService:
                 else:
                     book.status = BookStatus.failed
                 await session.commit()
+                if final_plan.failed:
+                    logger.warning(
+                        "Translation finished with failures: %s (%s failed)",
+                        book.title,
+                        final_plan.failed,
+                    )
+                else:
+                    logger.info("Translation complete: %s", book.title)
             except Exception as e:
                 logger.error(f"Error processing book {book_id}: {e}", exc_info=True)
                 book.status = BookStatus.failed

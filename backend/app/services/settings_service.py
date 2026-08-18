@@ -23,7 +23,7 @@ class SettingsService:
                 if settings.get("storage_path"):
                     os.environ["STORAGE_DIR"] = settings["storage_path"]
                 
-                logger.info("Loaded settings from settings.json")
+                logger.debug("Loaded settings from settings.json")
                 return settings
         except Exception as e:
             logger.error(f"Failed to load settings.json: {e}")

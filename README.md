@@ -39,6 +39,9 @@ RUN_DB_MIGRATIONS=0 ./run.sh     # skip automatic migrations
 DB_MIGRATION_MODE=check ./run.sh # keep app-side revision check enabled
 ```
 
+Routine successful HTTP requests are hidden from the backend console. For troubleshooting, use
+`APP_ACCESS_LOG=all` to show every request or `APP_LOG_LEVEL=DEBUG` to show internal details.
+
 ## Doc Map
 
 - `ARCHITECTURE.md`: runtime architecture and boundaries.
