@@ -136,7 +136,7 @@ async def test_translate_text_prompt_requests_latex_ocr_fixes_without_explanatio
     async def fake_complete(user_prompt, system_prompt, temperature=0.3):
         assert user_prompt == "Let $x \\in R$ be fixed."
         assert "recognized/OCR text" in system_prompt
-        assert "fix obvious LaTeX syntax errors" in system_prompt
+        assert "fix only obvious latex syntax errors" in system_prompt.lower()
         assert "Do not explain, list, or mention any fixes" in system_prompt
         assert "Output ONLY the translated Markdown" in system_prompt
         assert "Markdown horizontal rule `---`" in system_prompt

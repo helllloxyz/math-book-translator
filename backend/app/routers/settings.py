@@ -1,4 +1,5 @@
 import json
+import os
 import re
 from pathlib import Path
 
@@ -14,7 +15,12 @@ from app.services.settings_service import SettingsService
 
 router = APIRouter()
 
-QUICK_INPUTS_PATH = Path(__file__).resolve().parents[3] / "config" / "quick-inputs.json"
+QUICK_INPUTS_PATH = Path(
+    os.getenv(
+        "QUICK_INPUTS_FILE",
+        str(Path(__file__).resolve().parents[3] / "config" / "quick-inputs.json"),
+    )
+)
 QUICK_INPUT_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
 
 

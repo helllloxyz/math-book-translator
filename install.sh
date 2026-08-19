@@ -1,54 +1,40 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -Eeuo pipefail
 
-echo "Starting environment installation..."
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VENV_PATH="${VENV_PATH:-$PROJECT_ROOT/backend/.venv}"
 
-# Check Python version (3.10+ required)
-if command -v python3.10 > /dev/null; then
-  PYTHON_BIN="python3.10"
-elif command -v python3 > /dev/null; then
-  PYTHON_VER=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-  PYTHON_MAJOR=$(echo "$PYTHON_VER" | cut -d '.' -f 1)
-  PYTHON_MINOR=$(echo "$PYTHON_VER" | cut -d '.' -f 2)
-  if [ "$PYTHON_MAJOR" -gt 3 ] || { [ "$PYTHON_MAJOR" -eq 3 ] && [ "$PYTHON_MINOR" -ge 10 ]; }; then
-    PYTHON_BIN="python3"
-  else
-    echo "Error: Python 3.10+ is required. Current python3 is $PYTHON_VER."
-    echo "Please install Python 3.10+ and re-run this script."
-    exit 1
-  fi
-else
-  echo "Error: Python 3.10+ is not installed."
+fail() {
+  echo "Error: $*" >&2
   exit 1
-fi
+}
 
-# Check Node.js version
-if command -v node > /dev/null; then
-  NODE_VER=$(node -v | cut -d 'v' -f 2)
-  NODE_MAJOR=$(echo $NODE_VER | cut -d '.' -f 1)
-  if [ "$NODE_MAJOR" -lt 20 ]; then
-    echo "Error: Node.js version 20.19+ or 22.12+ is required. Current version is $NODE_VER."
-    exit 1
+echo "Installing Math Book Translator dependencies..."
+
+PYTHON_BIN=""
+for candidate in python3.12 python3.11 python3.10 python3 python; do
+  if command -v "$candidate" >/dev/null 2>&1 && "$candidate" -c 'import sys; raise SystemExit(sys.version_info < (3, 10))' >/dev/null 2>&1; then
+    PYTHON_BIN="$candidate"
+    break
   fi
-else
-  echo "Error: Node.js is not installed."
-  exit 1
-fi
+done
+[[ -n "$PYTHON_BIN" ]] || fail "Python 3.10 or newer is required."
 
-# Install backend dependencies
-echo "Installing backend dependencies..."
-VENV_PATH=${VENV_PATH:-"$HOME/agent"}
-echo "Creating virtual environment at $VENV_PATH..."
-$PYTHON_BIN -m venv "$VENV_PATH"
-source "$VENV_PATH/bin/activate"
-cd backend
-pip install -r requirements.txt
-deactivate
-cd ..
+command -v node >/dev/null 2>&1 || fail "Node.js 22.12 or newer is required."
+node -e 'const [major, minor] = process.versions.node.split(".").map(Number); process.exit(major > 22 || (major === 22 && minor >= 12) ? 0 : 1)' \
+  || fail "Node.js 22.12 or newer is required; found $(node --version)."
+command -v npm >/dev/null 2>&1 || fail "npm is required."
 
-# Install frontend dependencies
-echo "Installing frontend dependencies..."
-cd frontend
-npm install
-cd ..
+echo "Using $($PYTHON_BIN --version) and Node.js $(node --version)."
+echo "Creating Python virtual environment at $VENV_PATH..."
+"$PYTHON_BIN" -m venv "$VENV_PATH"
+"$VENV_PATH/bin/python" -m pip install --upgrade pip
+"$VENV_PATH/bin/python" -m pip install -r "$PROJECT_ROOT/backend/requirements.txt"
 
-echo "Environment installation complete."
+echo "Installing locked frontend dependencies..."
+npm --prefix "$PROJECT_ROOT/frontend" ci
+
+echo "Building the frontend..."
+npm --prefix "$PROJECT_ROOT/frontend" run build
+
+echo "Installation complete. Run ./run.sh to start the local application."

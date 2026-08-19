@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -9,7 +10,9 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[3]
 CONFIG_DIR = REPO_ROOT / "config"
 PRIVATE_CONFIG_DIR = REPO_ROOT / "backend" / "config"
-DEFAULT_CREDENTIALS_PATH = PRIVATE_CONFIG_DIR / "llm_credentials.json"
+DEFAULT_CREDENTIALS_PATH = Path(
+    os.getenv("LLM_CREDENTIALS_FILE", str(PRIVATE_CONFIG_DIR / "llm_credentials.json"))
+)
 DEFAULT_PROVIDER_OPTIONS_PATH = CONFIG_DIR / "llm_provider_options.json"
 DEFAULT_LLM_TASK = "default"
 

@@ -8,6 +8,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.logging_config import configure_logging
 from app.models.base import engine
@@ -17,6 +18,20 @@ from app.services.settings_service import SettingsService
 
 configure_logging()
 logger = logging.getLogger("app")
+
+
+class SPAStaticFiles(StaticFiles):
+    """Serve built frontend files and fall back to index.html for browser routes."""
+
+    async def get_response(self, path: str, scope):
+        try:
+            return await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            headers = dict(scope.get("headers", []))
+            accepts_html = b"text/html" in headers.get(b"accept", b"")
+            if exc.status_code != 404 or not accepts_html:
+                raise
+            return await super().get_response("index.html", scope)
 
 
 def _cors_allow_origins() -> list[str]:
@@ -33,6 +48,17 @@ def _cors_allow_credentials(origins: list[str]) -> bool:
     if configured is not None:
         return configured.lower() in ("1", "true", "yes", "on")
     return "*" not in origins
+
+
+def _should_serve_frontend() -> bool:
+    return os.getenv("SERVE_FRONTEND", "0").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _frontend_dist_dir() -> Path:
+    configured = os.getenv("FRONTEND_DIST_DIR")
+    if configured:
+        return Path(configured).expanduser().resolve()
+    return Path(__file__).resolve().parents[2] / "frontend" / "dist"
 
 
 def _import_external_alembic(module_name: str):
@@ -121,6 +147,15 @@ def create_app() -> FastAPI:
     app.include_router(guides.router)
     app.include_router(quiz.router)
     app.include_router(legacy.router)
+
+    if _should_serve_frontend():
+        frontend_dir = _frontend_dist_dir()
+        if not (frontend_dir / "index.html").is_file():
+            raise RuntimeError(
+                f"Built frontend not found at {frontend_dir}. Run the installation script first."
+            )
+        app.mount("/", SPAStaticFiles(directory=frontend_dir, html=True), name="frontend")
+
     return app
 
 

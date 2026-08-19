@@ -20,9 +20,17 @@ The backend is organized around API routers and focused services:
 - `chapters` router: source and translated chapter content.
 - `chat` router: ask and streaming chat endpoints.
 - `guides` router: list/read/generate top-down guides.
+- `quiz` router: chapter/book Quiz, attempts, target selection, and learning profiles.
 - `legacy` router: backward-compatible note APIs and legacy endpoints.
 
 Routers should stay thin: validation, dependency injection, and handoff to services.
+
+## Runtime Modes
+
+- The user-facing `install` scripts install dependencies and build `frontend/dist`.
+- The user-facing `run` scripts set `SERVE_FRONTEND=1`; FastAPI mounts the built SPA after all API routes and serves the full application from one port.
+- Contributors can run FastAPI and the Vite development server separately when hot reload is needed.
+- `/health`, `/docs`, `/static`, `/config`, and application API paths retain priority over the SPA fallback.
 
 ## BookStorage Boundary
 

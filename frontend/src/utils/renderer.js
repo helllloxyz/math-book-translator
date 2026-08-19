@@ -1,5 +1,5 @@
 import MarkdownIt from 'markdown-it'
-import mk from '@iktakahiro/markdown-it-katex'
+import katexPlugin from '@vscode/markdown-it-katex'
 import mermaid from 'mermaid'
 import 'katex/dist/katex.min.css'
 import renderMathInElement from 'katex/dist/contrib/auto-render'
@@ -14,6 +14,7 @@ mermaid.initialize({
 })
 
 const md = new MarkdownIt({ html: false, linkify: true, typographer: true })
+const mk = katexPlugin.default || katexPlugin
 md.use(mk, {
     throwOnError: false,
     errorColor: '#cc0000'

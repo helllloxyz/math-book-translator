@@ -12,7 +12,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@iktakahiro/markdown-it-katex": "^4.0.1",
+    "@vscode/markdown-it-katex": "^1.1.2",
     "axios": "^1.13.4",
     "katex": "^0.16.28",
     "latex.css": "^1.13.0",

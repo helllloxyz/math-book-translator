@@ -27,7 +27,7 @@ from app.services.translator import TranslatorService
 router = APIRouter()
 
 
-@router.get("/")
+@router.get("/health")
 def read_root():
     return {"message": "Math Book Translator API is running"}
 

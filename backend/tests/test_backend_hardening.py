@@ -212,6 +212,33 @@ def test_cors_disables_credentials_when_wildcard_origin(monkeypatch):
     assert cors_middleware.kwargs["allow_credentials"] is False
 
 
+def test_production_frontend_serves_spa_routes_without_shadowing_api(tmp_path, monkeypatch):
+    frontend_dir = tmp_path / "dist"
+    frontend_dir.mkdir()
+    (frontend_dir / "index.html").write_text("<html><body>production app</body></html>", encoding="utf-8")
+    (frontend_dir / "app.js").write_text("console.log('app')", encoding="utf-8")
+    monkeypatch.setenv("SERVE_FRONTEND", "1")
+    monkeypatch.setenv("FRONTEND_DIST_DIR", str(frontend_dir))
+
+    client = TestClient(create_app())
+
+    assert client.get("/").text == "<html><body>production app</body></html>"
+    assert client.get("/book/123", headers={"Accept": "text/html"}).text == (
+        "<html><body>production app</body></html>"
+    )
+    assert client.get("/app.js").text == "console.log('app')"
+    assert client.get("/health").json() == {"message": "Math Book Translator API is running"}
+    assert client.get("/missing.js").status_code == 404
+
+
+def test_production_frontend_requires_a_completed_build(tmp_path, monkeypatch):
+    monkeypatch.setenv("SERVE_FRONTEND", "1")
+    monkeypatch.setenv("FRONTEND_DIST_DIR", str(tmp_path / "missing"))
+
+    with pytest.raises(RuntimeError, match="Built frontend not found"):
+        create_app()
+
+
 def test_startup_skips_migration_check_by_default(monkeypatch):
     create_all_calls = []
     migration_checks = []

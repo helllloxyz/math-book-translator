@@ -12,6 +12,7 @@ project_spec.md
 .superpowers/
 .worktrees/
 .venv
+backend/.venv/
 .agents
 skills-lock.json
 .DS_Store

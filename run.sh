@@ -1,62 +1,46 @@
-#!/bin/bash
-echo "Starting Math Book Translator..."
+#!/usr/bin/env bash
+set -Eeuo pipefail
 
-# Start backend
-echo "Starting backend server..."
-cd backend
-VENV_PATH=${VENV_PATH:-"$HOME/agent"}
-source "$VENV_PATH/bin/activate"
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VENV_PATH="${VENV_PATH:-$PROJECT_ROOT/backend/.venv}"
+APP_HOST="${APP_HOST:-127.0.0.1}"
+APP_PORT="${APP_PORT:-8000}"
+OPEN_BROWSER="${OPEN_BROWSER:-1}"
 
-RUN_DB_MIGRATIONS=${RUN_DB_MIGRATIONS:-1}
-if [ "$RUN_DB_MIGRATIONS" = "1" ]; then
-  echo "Applying database migrations..."
-  alembic upgrade head || exit 1
-else
-  echo "Skipping database migrations (RUN_DB_MIGRATIONS=$RUN_DB_MIGRATIONS)"
-fi
-
-DB_MIGRATION_MODE=${DB_MIGRATION_MODE:-off}
-export DB_MIGRATION_MODE
-uvicorn app.main:app &
-BACKEND_PID=$!
-cd ..
-
-# Start frontend
-echo "Starting frontend development server..."
-cd frontend
-npm run dev &
-FRONTEND_PID=$!
-cd ..
-
-# Cleanup function to kill background processes
-cleanup() {
-  echo ""
-  echo "Stopping servers..."
-  kill $BACKEND_PID $FRONTEND_PID 2>/dev/null
-  exit
+[[ -x "$VENV_PATH/bin/python" ]] || {
+  echo "Python environment not found at $VENV_PATH. Run ./install.sh first." >&2
+  exit 1
+}
+[[ -f "$PROJECT_ROOT/frontend/dist/index.html" ]] || {
+  echo "Frontend build not found. Run ./install.sh first." >&2
+  exit 1
 }
 
-# Trap SIGINT (Ctrl+C) and SIGTERM
-trap cleanup SIGINT SIGTERM
+echo "Applying database migrations..."
+(cd "$PROJECT_ROOT/backend" && "$VENV_PATH/bin/python" -m alembic upgrade head)
 
-echo "Waiting for servers to start..."
-sleep 5 # Give servers some time to spin up
+export SERVE_FRONTEND=1
+export FRONTEND_DIST_DIR="$PROJECT_ROOT/frontend/dist"
+export DB_MIGRATION_MODE=check
 
-# Open in browser
-FRONTEND_URL="http://localhost:5173"
-echo "Opening application in browser: $FRONTEND_URL"
-# Detect OS and open browser accordingly
-if command -v xdg-open > /dev/null; then
-  xdg-open $FRONTEND_URL
-elif command -v open > /dev/null; then
-  open $FRONTEND_URL
-elif command -v start > /dev/null; then
-  start $FRONTEND_URL
-else
-  echo "Could not automatically open browser. Please navigate to $FRONTEND_URL manually."
+APP_URL="http://$APP_HOST:$APP_PORT"
+if [[ "$APP_HOST" == "0.0.0.0" ]]; then
+  APP_URL="http://localhost:$APP_PORT"
 fi
 
-echo "Math Book Translator is running. Press Ctrl+C to stop servers."
+echo "Math Book Translator is available at $APP_URL"
+echo "Press Ctrl+C to stop."
 
-# Keep the script running until manually stopped, to keep child processes alive
-wait $BACKEND_PID $FRONTEND_PID
+if [[ "$OPEN_BROWSER" == "1" ]]; then
+  (
+    sleep 2
+    if command -v xdg-open >/dev/null 2>&1; then
+      xdg-open "$APP_URL" >/dev/null 2>&1 || true
+    elif command -v open >/dev/null 2>&1; then
+      open "$APP_URL" >/dev/null 2>&1 || true
+    fi
+  ) &
+fi
+
+cd "$PROJECT_ROOT/backend"
+exec "$VENV_PATH/bin/python" -m uvicorn app.main:app --host "$APP_HOST" --port "$APP_PORT"

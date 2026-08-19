@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+from pathlib import Path
 
 from app.models.schema import SettingsRequest
 from app.services.llm_credentials import FileCredentialRegistry
@@ -8,7 +9,7 @@ from app.services.llm_credentials import FileCredentialRegistry
 logger = logging.getLogger("app.settings")
 
 class SettingsService:
-    SETTINGS_FILE = "settings.json"
+    SETTINGS_FILE = os.getenv("SETTINGS_FILE", "settings.json")
 
     @staticmethod
     def load_settings():
@@ -64,7 +65,9 @@ class SettingsService:
             for secret_key in ("providers", "api_keys", "api_key", "model_names", "model_name", "llm_provider"):
                 existing.pop(secret_key, None)
 
-            with open(SettingsService.SETTINGS_FILE, "w") as f:
+            settings_path = Path(SettingsService.SETTINGS_FILE)
+            settings_path.parent.mkdir(parents=True, exist_ok=True)
+            with settings_path.open("w") as f:
                 json.dump(existing, f, indent=2)
                 
             return {"message": "Settings updated"}

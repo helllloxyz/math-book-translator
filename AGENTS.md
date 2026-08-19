@@ -15,14 +15,14 @@ The repo also contains the DeepTree Author agent workflow for generated mathemat
 ## Run And Verify
 
 - Use the repository's Node 22 runtime through mise for all Node-dependent commands: `mise exec node@22 -- <command>`.
-- Full local app: `./install.sh`, then `cp backend/.env.example backend/.env`, then `mise exec node@22 -- ./run.sh`.
+- Full local app: `mise exec node@22 -- ./install.sh`, then `./run.sh`.
 - Backend only: `cd backend && source .venv/bin/activate && alembic upgrade head && uvicorn app.main:app --reload`.
 - Frontend only: `cd frontend && mise exec node@22 -- npm run dev`.
 - Backend tests: `cd backend && source .venv/bin/activate && pytest`.
 - Frontend build: `cd frontend && mise exec node@22 -- npm run build`.
 - Frontend tests are plain Node scripts: run individual `*.test.mjs` files through mise, for example `cd frontend && mise exec node@22 -- node src/utils/readerTree.test.mjs`.
 
-`run.sh` applies Alembic migrations by default. Use `RUN_DB_MIGRATIONS=0 ./run.sh` to skip, or `DB_MIGRATION_MODE=check ./run.sh` to make app startup verify the database revision.
+`install.sh` installs both dependency sets and builds the frontend. `run.sh` applies Alembic migrations and starts the built frontend plus API on one port.
 
 Do not commit local runtime artifacts: `.env`, `*.db`, logs, `storage/`, `backend/storage/`, `.superpowers/`, `.worktrees/`, `frontend/dist/`, and virtual environments.
 
@@ -37,7 +37,7 @@ Do not commit local runtime artifacts: `.env`, `*.db`, logs, `storage/`, `backen
   - `Chapter`: chapter index/title/order linked to a book; content lives on disk.
   - `UserNote`: reader notes, chat notes, quiz/selection/chapter note records.
   - enums: `BookStatus`, `AgentStage`, `BookType`, `NoteType`.
-- `backend/alembic/` contains schema migrations. Prefer migrations over ad hoc database mutations.
+- `backend/alembic/` contains schema migrations. `20260805_0009` is the consolidated first-release baseline; do not rewrite it after public release. Prefer new migrations over ad hoc database mutations.
 
 ### Backend Routers
 
@@ -142,5 +142,5 @@ The frontend authoring console has been retired. Legacy `/agent/*` routes still 
 
 ## Known Sharp Edges
 
-- `backend/.env` may contain real local credentials; never print or copy secret values into committed docs or logs.
+- `backend/config/llm_credentials.json` may contain real local credentials; never print or copy its values into committed docs or logs.
 - Older imported packages can still contain a legacy `book_learning/` directory. Runtime code ignores it and new exports omit it.

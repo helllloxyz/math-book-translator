@@ -472,7 +472,7 @@ const normalizeQuickInputs = (rawInputs) => {
 
 const loadQuickInputs = async () => {
   try {
-    const response = await fetch(buildApiUrl('/config/quick-inputs.json'), { cache: 'no-store' })
+    const response = await fetch(buildApiUrl('/settings/quick-inputs'), { cache: 'no-store' })
     if (!response.ok) throw new Error('Failed to load quick inputs')
     quickInputs.value = normalizeQuickInputs(await response.json())
   } catch (_error) {

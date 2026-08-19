@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import MarkdownIt from 'markdown-it'
-import mk from '@iktakahiro/markdown-it-katex'
+import katexPlugin from '@vscode/markdown-it-katex'
 import { normalizeMathDelimiters } from './mathDelimiters.js'
 
 const normalized = normalizeMathDelimiters(String.raw`Inline \(x + y\), then display \[x^2 + y^2\].`)
@@ -14,6 +14,7 @@ assert.equal(
 )
 assert.equal(normalizeMathDelimiters('$z$'), '$z$', 'existing dollar delimiters should remain unchanged')
 
+const mk = katexPlugin.default || katexPlugin
 const rendered = new MarkdownIt().use(mk, { throwOnError: false }).render(normalized)
 assert.match(rendered, /class="katex"/, 'normalized LaTeX delimiters should render to KaTeX HTML without DOM auto-rendering')
 

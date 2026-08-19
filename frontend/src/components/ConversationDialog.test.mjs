@@ -43,7 +43,7 @@ assert.match(component, /v-if="!isQuiz" class="dialog-toolbar"/, 'note quick inp
 assert.match(component, /class="quiz-answer-guidance"/, 'quiz composer should explain that natural-language answers do not require formulas')
 assert.match(component, /用自己的话讲讲，不必输入公式/, 'quiz answer placeholder should invite a natural-language explanation')
 assert.match(component, /v-for="quickInput in quickInputs"/, 'quick-input buttons should be loaded from configuration')
-assert.match(component, /buildApiUrl\('\/config\/quick-inputs\.json'\)/, 'dialog should load editable quick inputs from their config path')
+assert.match(component, /buildApiUrl\('\/settings\/quick-inputs'\)/, 'dialog should load editable quick inputs from the backend settings API')
 assert.match(component, /appendQuickInputText\(draft\.value, quickInput\?\.prompt\)/, 'a quick-input click should append its text to the visible composer')
 assert.match(component, /emit\('send', prompt\)/, 'the visible composer content should be sent as the ordinary user message')
 assert.doesNotMatch(component, /dialog-toolbar button\.active|:class="\{ active:/, 'quick-input buttons should return to their normal state after each click')
