@@ -80,8 +80,19 @@ class GuideService:
             return {"content": await handle.read()}
 
     @staticmethod
-    async def generate_top_down_guides(book, chapters, translator) -> list[dict[str, str]]:
-        return await GuideCompilerService.generate_top_down_guides(book, chapters, translator)
+    async def generate_top_down_guides(
+        book,
+        chapters,
+        translator,
+        *,
+        mode: str = "missing",
+    ) -> list[dict[str, str]]:
+        return await GuideCompilerService.generate_top_down_guides(
+            book,
+            chapters,
+            translator,
+            mode=mode,
+        )
 
     @staticmethod
     async def generate_chapter_guide(book, chapter, translator) -> list[dict[str, str]]:

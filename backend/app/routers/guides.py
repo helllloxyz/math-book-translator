@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.base import get_db
-from app.models.schema import Book, BookStatus, Chapter
+from app.models.schema import Book, BookStatus, Chapter, GuideGenerationRequest
+from app.services.book_service import BookService
 from app.services.guide_service import GuideService
 from app.services.translator import LLMConfigurationError, TranslatorService
 
@@ -35,25 +36,30 @@ async def get_book_guide(book_id: int, filename: str, db: AsyncSession = Depends
 
 
 @router.post("/books/{book_id}/guides/top-down")
-async def generate_top_down_guides(book_id: int, db: AsyncSession = Depends(get_db)):
+async def generate_top_down_guides(
+    book_id: int,
+    background_tasks: BackgroundTasks,
+    request: GuideGenerationRequest | None = None,
+    db: AsyncSession = Depends(get_db),
+):
     result = await db.execute(select(Book).where(Book.id == book_id))
     book = result.scalar_one_or_none()
     if not book:
         raise HTTPException(status_code=404, detail="Book not found")
+    if book.status in (BookStatus.translating, BookStatus.generating, BookStatus.generating_guides):
+        raise HTTPException(status_code=409, detail="Book processing is already running")
 
-    chapters_result = await db.execute(
-        select(Chapter).where(Chapter.book_id == book_id).order_by(Chapter.order)
-    )
-    chapters = chapters_result.scalars().all()
     try:
-        guides = await GuideService.generate_top_down_guides(
-            book, chapters, TranslatorService(task="guides")
-        )
+        TranslatorService.require_configured(task="guides")
     except LLMConfigurationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-    return {"guides": guides}
+    mode = request.mode if request else "missing"
+    background_tasks.add_task(
+        BookService.process_book_guide_generation,
+        book_id,
+        mode,
+    )
+    return {"message": "Guide generation started", "mode": mode}
 
 
 @router.post("/books/{book_id}/chapters/{chapter_id}/guides")

@@ -46,7 +46,8 @@ async def test_management_snapshot_aggregates_content_quiz_and_profile_state(tmp
         await db.flush()
         first = Chapter(book_id=book.id, chapter_index="1", title_en="Spaces", order=1)
         second = Chapter(book_id=book.id, chapter_index="2", title_en="Maps", order=2)
-        db.add_all([first, second])
+        third = Chapter(book_id=book.id, chapter_index="3", title_en="Split Fragment", order=3)
+        db.add_all([first, second, third])
         await db.flush()
         question = QuizQuestion(
             book_id=book.id,
@@ -79,13 +80,23 @@ async def test_management_snapshot_aggregates_content_quiz_and_profile_state(tmp
         )
         await db.commit()
 
-        for chapter in (first, second):
+        for chapter in (first, second, third):
             raw_path = BookStorage.raw_chapter_path(book.uuid, chapter.chapter_index)
             raw_path.parent.mkdir(parents=True, exist_ok=True)
-            raw_path.write_text(f"# {chapter.title_en}\n\nSource", encoding="utf-8")
+            raw_path.write_text(
+                (
+                    f"# {chapter.title_en}\n\nFragment."
+                    if chapter is third
+                    else f"# {chapter.title_en}\n\nSource body with enough complete mathematical context for guide generation."
+                ),
+                encoding="utf-8",
+            )
         translated_path = BookStorage.translated_chapter_path(book.uuid, first.chapter_index)
         translated_path.parent.mkdir(parents=True, exist_ok=True)
-        translated_path.write_text("# 空间\n\n译文", encoding="utf-8")
+        translated_path.write_text(
+            "# 空间\n\n这一章完整介绍拓扑空间的定义、开集公理以及后续连续映射所需的基础。",
+            encoding="utf-8",
+        )
 
         guide_dir = BookStorage.guide_dir(book.uuid)
         guide_dir.mkdir(parents=True, exist_ok=True)
@@ -116,8 +127,10 @@ async def test_management_snapshot_aggregates_content_quiz_and_profile_state(tmp
     assert snapshot["content"]["translated_chapters"] == 1
     assert snapshot["content"]["chapter_guides_stale"] == 1
     assert snapshot["content"]["chapter_guides_missing"] == 1
+    assert snapshot["content"]["chapter_guides_skipped"] == 1
     assert snapshot["chapters"][0]["guide"]["status"] == "stale"
     assert snapshot["chapters"][1]["translation"]["status"] == "missing"
+    assert snapshot["chapters"][2]["guide"]["status"] == "skipped"
     assert snapshot["quiz"]["attempts"] == 1
     assert snapshot["quiz"]["average_score"] == 0.86
     assert snapshot["quiz"]["type_breakdown"][0]["label"] == "概念讲解"

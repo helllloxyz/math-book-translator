@@ -342,6 +342,68 @@ direct_child_guide_inputs:
         return normalized
 
     @staticmethod
+    async def _read_existing_guides(book_uuid: str) -> list[dict[str, str]]:
+        manifest_path = BookStorage.guide_manifest_path(book_uuid)
+        if not manifest_path.exists():
+            return []
+        try:
+            async with aiofiles.open(manifest_path, "r", encoding="utf-8") as handle:
+                manifest = json.loads(await handle.read())
+        except (OSError, json.JSONDecodeError):
+            return []
+
+        existing_guides: list[dict[str, str]] = []
+        for item in manifest if isinstance(manifest, list) else []:
+            if not isinstance(item, dict):
+                continue
+            filename = str(item.get("filename") or "")
+            if not filename:
+                continue
+            path = BookStorage.guide_dir(book_uuid) / filename
+            if not path.exists():
+                continue
+            try:
+                async with aiofiles.open(path, "r", encoding="utf-8") as handle:
+                    markdown = await handle.read()
+            except OSError:
+                continue
+            normalized = GuideCompilerService.normalize_guides(
+                {"guides": [{**item, "markdown": markdown}]}
+            )
+            if normalized:
+                existing_guides.append(normalized[0])
+        return existing_guides
+
+    @staticmethod
+    async def _finalize_missing_guides(
+        book_uuid: str,
+        active_guides: list[dict[str, str]],
+    ) -> list[dict[str, str]]:
+        """Stabilize manifest order without rewriting preserved guide files."""
+        current_guides = await GuideCompilerService._read_existing_guides(book_uuid)
+        current_by_filename = {guide["filename"]: guide for guide in current_guides}
+        ordered: list[dict[str, str]] = []
+        seen: set[str] = set()
+        for guide in [*active_guides, *current_guides]:
+            filename = str(guide.get("filename") or "")
+            if not filename or filename in seen or filename not in current_by_filename:
+                continue
+            seen.add(filename)
+            ordered.append(current_by_filename[filename])
+
+        manifest_path = BookStorage.guide_manifest_path(book_uuid)
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        temp_path = manifest_path.with_suffix(manifest_path.suffix + ".tmp")
+        manifest = [
+            {key: value for key, value in guide.items() if key != "markdown"}
+            for guide in ordered
+        ]
+        async with aiofiles.open(temp_path, "w", encoding="utf-8") as handle:
+            await handle.write(json.dumps(manifest, ensure_ascii=False, indent=2))
+        temp_path.replace(manifest_path)
+        return ordered
+
+    @staticmethod
     async def _complete_guides(translator, user_prompt: str, system_prompt: str) -> list[dict[str, str]]:
         last_error: Exception | None = None
         for attempt in range(GuideCompilerService.MAX_LLM_RETRIES):
@@ -429,10 +491,31 @@ direct_child_guide_inputs:
         return roots
 
     @staticmethod
-    async def generate_top_down_guides(book, chapters, translator) -> list[dict[str, str]]:
+    async def generate_top_down_guides(
+        book,
+        chapters,
+        translator,
+        *,
+        mode: str = "missing",
+    ) -> list[dict[str, str]]:
+        if mode not in {"missing", "all"}:
+            raise ValueError("Guide generation mode must be 'missing' or 'all'")
+
         system_prompt = PromptRegistry.get(PromptId.TOP_DOWN_GUIDE).system
         request_semaphore = asyncio.Semaphore(GuideCompilerService.GUIDE_GENERATION_CONCURRENCY)
         checkpoint_lock = asyncio.Lock()
+        existing_guides = (
+            await GuideCompilerService._read_existing_guides(book.uuid)
+            if mode == "missing"
+            else []
+        )
+        existing_by_scope: dict[tuple[str, str], list[dict[str, str]]] = {}
+        for guide in existing_guides:
+            key = (str(guide.get("scope_type") or "book"), str(guide.get("scope_id") or "book"))
+            existing_by_scope.setdefault(key, []).append(guide)
+
+        def guides_for_scope(scope_type: str, scope_id: str) -> list[dict[str, str]]:
+            return existing_by_scope.get((scope_type, scope_id), [])
 
         async def complete_guides(user_prompt: str) -> list[dict[str, str]]:
             async with request_semaphore:
@@ -451,11 +534,14 @@ direct_child_guide_inputs:
                 if node.chapter is None:
                     return [], []
                 chapter = node.chapter
+                current_guides = guides_for_scope("chapter", str(chapter.chapter_index))
+                if current_guides:
+                    return current_guides, current_guides
                 chapter_context = await ChapterSourceService.chapter_context(
                     book.uuid,
                     chapter,
                 )
-                if not chapter_context["body"]:
+                if not ChapterSourceService.is_guide_body_eligible(chapter_context["body"]):
                     return [], []
                 user_prompt = GuideCompilerService.build_chapter_guide_prompt(book.title, chapter_context)
                 guides = [
@@ -486,12 +572,16 @@ direct_child_guide_inputs:
                     book.uuid,
                     node.chapter,
                 )
-                directory_context.update(
-                    {
-                        "body_language": own_context["body_language"],
-                        "body": own_context["body"],
-                    }
-                )
+                if ChapterSourceService.is_guide_body_eligible(own_context["body"]):
+                    directory_context.update(
+                        {
+                            "body_language": own_context["body_language"],
+                            "body": own_context["body"],
+                        }
+                    )
+            current_guides = guides_for_scope("directory", node.index)
+            if current_guides:
+                return current_guides, [*subtree_guides, *current_guides]
             if not child_guide_inputs and not directory_context.get("body"):
                 return [], subtree_guides
             user_prompt = GuideCompilerService.build_directory_guide_prompt(
@@ -518,7 +608,18 @@ direct_child_guide_inputs:
             generated_guides.extend(root_subtree_guides)
 
         if not top_level_guide_inputs:
+            if mode == "missing":
+                return await GuideCompilerService._finalize_missing_guides(
+                    book.uuid,
+                    generated_guides,
+                )
             return await GuideCompilerService.write_guides(book.uuid, generated_guides)
+        current_book_guides = guides_for_scope("book", "book")
+        if current_book_guides:
+            return await GuideCompilerService._finalize_missing_guides(
+                book.uuid,
+                [*generated_guides, *current_book_guides],
+            )
         user_prompt = GuideCompilerService.build_book_guide_prompt(book.title, top_level_guide_inputs)
         book_guides = [
             GuideCompilerService._force_guide_scope(guide, "book", "book")
@@ -526,6 +627,8 @@ direct_child_guide_inputs:
         ]
         await checkpoint(book_guides)
         guides = [*generated_guides, *book_guides]
+        if mode == "missing":
+            return await GuideCompilerService._finalize_missing_guides(book.uuid, guides)
         return await GuideCompilerService.write_guides(book.uuid, guides)
 
     @staticmethod
@@ -534,6 +637,11 @@ direct_child_guide_inputs:
         chapter_context = await ChapterSourceService.chapter_context(book.uuid, chapter)
         if not chapter_context["body"]:
             raise ValueError("Chapter body is missing")
+        if not ChapterSourceService.is_guide_body_eligible(chapter_context["body"]):
+            raise ValueError(
+                "Chapter body is too short to generate a reliable guide "
+                f"(minimum {ChapterSourceService.MIN_GUIDE_BODY_CHARS} substantive characters)"
+            )
 
         system_prompt = PromptRegistry.get(PromptId.TOP_DOWN_GUIDE).system
         user_prompt = GuideCompilerService.build_chapter_guide_prompt(book.title, chapter_context)

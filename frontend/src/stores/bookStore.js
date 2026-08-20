@@ -154,11 +154,12 @@ export const useBookStore = defineStore('book', {
         throw new Error(message)
       }
     },
-    async generateBookGuides(id) {
+    async generateBookGuides(id, mode = 'missing') {
       try {
-        await apiClient.post(`/books/${id}/translate`)
+        const response = await apiClient.post(`/books/${id}/guides/top-down`, { mode })
         const book = this.books.find(item => item.id === id)
         if (book) book.status = 'generating_guides'
+        return response.data
       } catch (err) {
         const message = err.response?.data?.detail || err.message
         this.error = message
@@ -285,10 +286,10 @@ export const useBookStore = defineStore('book', {
         throw err
       }
     },
-    async generateTopDownGuides(bookId) {
+    async generateTopDownGuides(bookId, mode = 'missing') {
       try {
-        const response = await apiClient.post(`/books/${bookId}/guides/top-down`)
-        return response.data.guides
+        const response = await apiClient.post(`/books/${bookId}/guides/top-down`, { mode })
+        return response.data
       } catch (err) {
         this.error = err.message
         throw err

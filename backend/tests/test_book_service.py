@@ -319,8 +319,8 @@ class MissingConfigTranslator(SlowTranslator):
 async def test_guide_generation_does_not_pregenerate_quizzes(monkeypatch):
     calls = []
 
-    async def generate_guides(book, chapters, translator):
-        calls.append("guides")
+    async def generate_guides(book, chapters, translator, *, mode):
+        calls.append(("guides", mode))
 
     monkeypatch.setattr(
         "app.services.book_service.GuideCompilerService.generate_top_down_guides",
@@ -337,12 +337,12 @@ async def test_guide_generation_does_not_pregenerate_quizzes(monkeypatch):
         1,
     )
 
-    assert calls == ["guides"]
+    assert calls == [("guides", "missing")]
 
 
 @pytest.mark.asyncio
 async def test_guide_generation_failure_is_not_hidden(monkeypatch):
-    async def fail_guides(book, chapters, translator):
+    async def fail_guides(book, chapters, translator, *, mode):
         raise RuntimeError("guide provider failed")
 
     monkeypatch.setattr(

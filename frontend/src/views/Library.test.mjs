@@ -30,7 +30,7 @@ assert.match(source, /画像待更新/, 'Library should show a compact pending-p
 assert.match(source, /name: 'book-management'/, 'each library book should link to its management workspace')
 assert.match(source, /name: 'book-learning'/, 'each library book should link to its learning workspace')
 assert.match(source, /target="_blank"/, 'secondary book workspaces should open in new tabs')
-assert.match(storeSource, /async generateBookGuides\(id\)/, 'book store should expose background guide generation for existing books')
+assert.match(storeSource, /async generateBookGuides\(id, mode = 'missing'\)/, 'book store should expose missing-first background guide generation for existing books')
 assert.match(source, /openBookMenuId/, 'Library should group secondary book actions in a discoverable menu')
 assert.match(source, /导出图书包/, 'Library management menu should group export with rename and delete')
 assert.match(source, /bookStore\.exportBookPackage\(book\.id/, 'Library menu export should download the selected book')

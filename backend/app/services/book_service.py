@@ -768,14 +768,72 @@ class BookService:
         return TranslationPlan(total=plan.total, completed=completed, pending=[], failed=failed)
 
     @staticmethod
-    async def generate_guides_for_translated_book(book, chapters, translator, session, book_id: int) -> None:
+    async def generate_guides_for_translated_book(
+        book,
+        chapters,
+        translator,
+        session,
+        book_id: int,
+        *,
+        mode: str = "missing",
+    ) -> None:
         book.status = BookStatus.generating_guides
         await session.commit()
         try:
-            await GuideCompilerService.generate_top_down_guides(book, chapters, translator)
+            await GuideCompilerService.generate_top_down_guides(
+                book,
+                chapters,
+                translator,
+                mode=mode,
+            )
         except Exception:
             logger.exception("Top-down guide generation failed for book %s", book_id)
             raise
+
+    @staticmethod
+    async def process_book_guide_generation(book_id: int, mode: str = "missing") -> None:
+        lock = BookService._translation_locks.setdefault(book_id, asyncio.Lock())
+        if lock.locked():
+            logger.info("Book processing task already running for Book ID: %s", book_id)
+            return
+
+        async with lock:
+            async with SessionLocal() as session:
+                book = await session.scalar(select(Book).where(Book.id == book_id))
+                if not book:
+                    return
+                chapters = list(
+                    (
+                        await session.execute(
+                            select(Chapter).where(Chapter.book_id == book_id).order_by(Chapter.order)
+                        )
+                    ).scalars().all()
+                )
+                try:
+                    TranslatorService.require_configured(task="guides")
+                    await BookService.generate_guides_for_translated_book(
+                        book,
+                        chapters,
+                        TranslatorService(task="guides"),
+                        session,
+                        book_id,
+                        mode=mode,
+                    )
+                    plan = await BookService.build_translation_plan(book, chapters)
+                    book.status = (
+                        BookStatus.translated
+                        if plan.total and plan.completed == plan.total
+                        else BookStatus.loaded
+                    )
+                    await session.commit()
+                except Exception:
+                    logger.exception(
+                        "Guide generation failed book=%s mode=%s",
+                        book_id,
+                        mode,
+                    )
+                    book.status = BookStatus.failed
+                    await session.commit()
 
     @staticmethod
     async def process_book_translation(book_id: int):

@@ -223,7 +223,7 @@ async def test_generation_checkpoints_chapter_guide_before_later_failure(tmp_pat
     monkeypatch.setenv("STORAGE_DIR", str(tmp_path))
     translated = tmp_path / "book-uuid" / "book_trans_md" / "1_trans_zh.md"
     translated.parent.mkdir(parents=True)
-    translated.write_text("Direct chapter body.", encoding="utf-8")
+    translated.write_text("Direct chapter body with enough complete mathematical context for a reliable preview.", encoding="utf-8")
 
     async def no_sleep(_seconds):
         return None
@@ -267,9 +267,9 @@ async def test_generate_top_down_guides_rolls_up_directory_nodes_bottom_up(tmp_p
     translated_dir = tmp_path / "book-uuid" / "book_trans_md"
     translated_dir.mkdir(parents=True)
     for stem, summary in {
-        "1_1_1": "Leaf 1.1.1 summary.",
-        "1_1_2": "Leaf 1.1.2 summary.",
-        "1_2": "Leaf 1.2 summary.",
+        "1_1_1": "Leaf 1.1.1 has enough complete mathematical context for a reliable chapter guide.",
+        "1_1_2": "Leaf 1.1.2 has enough complete mathematical context for a reliable chapter guide.",
+        "1_2": "Leaf 1.2 has enough complete mathematical context for a reliable chapter guide.",
     }.items():
         (translated_dir / f"{stem}_trans_zh.md").write_text(summary, encoding="utf-8")
 
@@ -459,11 +459,182 @@ async def test_generate_top_down_guides_stages_chapter_then_book_prompts(tmp_pat
 
 
 @pytest.mark.asyncio
+async def test_missing_mode_reuses_existing_guides_and_only_generates_absent_scopes(tmp_path, monkeypatch):
+    monkeypatch.setenv("STORAGE_DIR", str(tmp_path))
+    translated_dir = tmp_path / "book-uuid" / "book_trans_md"
+    translated_dir.mkdir(parents=True)
+    for chapter_index in ("1", "2"):
+        (translated_dir / f"{chapter_index}_trans_zh.md").write_text(
+            f"Chapter {chapter_index} contains enough complete mathematical context for a reliable guide.",
+            encoding="utf-8",
+        )
+
+    class Book:
+        uuid = "book-uuid"
+        title = "Missing Guides"
+
+    class Chapter:
+        def __init__(self, chapter_index):
+            self.chapter_index = chapter_index
+            self.title_zh = None
+            self.title_en = f"Chapter {chapter_index}"
+            self.order = int(chapter_index)
+
+    await GuideCompilerService.write_guides(
+        Book.uuid,
+        [
+            {
+                "slug": "preview",
+                "title": "Existing Chapter One",
+                "summary": "Existing chapter one summary.",
+                "scope_type": "chapter",
+                "scope_id": "1",
+                "markdown": "# Existing Chapter One",
+            }
+        ],
+    )
+    existing_path = tmp_path / Book.uuid / "book_guides" / "chapter-1-preview.md"
+    existing_mtime = existing_path.stat().st_mtime_ns
+
+    class MissingTranslator:
+        def __init__(self):
+            self.prompts = []
+
+        async def complete(self, user_prompt, system_prompt, temperature=0.3):
+            self.prompts.append(user_prompt)
+            assert '"chapter_index": "1"' not in user_prompt
+            if "chapter-level guides" in user_prompt:
+                assert '"chapter_index": "2"' in user_prompt
+                return '''{"guides": [{"slug": "preview", "title": "New Chapter Two", "summary": "New chapter two summary.", "markdown": "# New Chapter Two"}]}'''
+            assert "Existing chapter one summary." in user_prompt
+            assert "New chapter two summary." in user_prompt
+            return '''{"guides": [{"slug": "overview", "title": "New Book Guide", "markdown": "# New Book Guide"}]}'''
+
+    translator = MissingTranslator()
+    guides = await GuideCompilerService.generate_top_down_guides(
+        Book(),
+        [Chapter("1"), Chapter("2")],
+        translator,
+        mode="missing",
+    )
+
+    assert len(translator.prompts) == 2
+    assert [guide["title"] for guide in guides] == [
+        "Existing Chapter One",
+        "New Chapter Two",
+        "New Book Guide",
+    ]
+    assert existing_path.stat().st_mtime_ns == existing_mtime
+
+    class NoCallTranslator:
+        async def complete(self, *args, **kwargs):
+            raise AssertionError("complete() should not be called when all guide scopes exist")
+
+    guides = await GuideCompilerService.generate_top_down_guides(
+        Book(),
+        [Chapter("1"), Chapter("2")],
+        NoCallTranslator(),
+        mode="missing",
+    )
+    assert len(guides) == 3
+
+
+@pytest.mark.asyncio
+async def test_all_mode_replaces_existing_guides(tmp_path, monkeypatch):
+    monkeypatch.setenv("STORAGE_DIR", str(tmp_path))
+    translated = tmp_path / "book-uuid" / "book_trans_md" / "1_trans_zh.md"
+    translated.parent.mkdir(parents=True)
+    translated.write_text(
+        "This chapter contains enough complete mathematical context for a reliable guide.",
+        encoding="utf-8",
+    )
+
+    class Book:
+        uuid = "book-uuid"
+        title = "Replace Guides"
+
+    class Chapter:
+        chapter_index = "1"
+        title_zh = None
+        title_en = "Chapter One"
+        order = 1
+
+    await GuideCompilerService.write_guides(
+        Book.uuid,
+        [{"slug": "preview", "title": "Old Guide", "scope_type": "chapter", "scope_id": "1", "markdown": "# Old"}],
+    )
+
+    class Translator:
+        def __init__(self):
+            self.calls = 0
+
+        async def complete(self, user_prompt, system_prompt, temperature=0.3):
+            self.calls += 1
+            if "chapter-level guides" in user_prompt:
+                return '''{"guides": [{"slug": "preview", "title": "Fresh Chapter Guide", "summary": "Fresh summary.", "markdown": "# Fresh"}]}'''
+            return '''{"guides": [{"slug": "overview", "title": "Fresh Book Guide", "markdown": "# Fresh Book"}]}'''
+
+    translator = Translator()
+    guides = await GuideCompilerService.generate_top_down_guides(
+        Book(), [Chapter()], translator, mode="all"
+    )
+
+    assert translator.calls == 2
+    assert [guide["title"] for guide in guides] == ["Fresh Chapter Guide", "Fresh Book Guide"]
+
+
+@pytest.mark.asyncio
+async def test_top_down_generation_skips_too_short_split_fragments(tmp_path, monkeypatch):
+    monkeypatch.setenv("STORAGE_DIR", str(tmp_path))
+    translated_dir = tmp_path / "book-uuid" / "book_trans_md"
+    translated_dir.mkdir(parents=True)
+    (translated_dir / "1_trans_zh.md").write_text("# Fragment\n\nToo short.", encoding="utf-8")
+    (translated_dir / "2_trans_zh.md").write_text(
+        "This second chapter contains enough complete mathematical context for a reliable guide.",
+        encoding="utf-8",
+    )
+
+    class Book:
+        uuid = "book-uuid"
+        title = "Split Fragments"
+
+    class Chapter:
+        def __init__(self, chapter_index):
+            self.chapter_index = chapter_index
+            self.title_zh = None
+            self.title_en = f"Chapter {chapter_index}"
+            self.order = int(chapter_index)
+
+    class Translator:
+        def __init__(self):
+            self.prompts = []
+
+        async def complete(self, user_prompt, system_prompt, temperature=0.3):
+            self.prompts.append(user_prompt)
+            assert '"chapter_index": "1"' not in user_prompt
+            if "chapter-level guides" in user_prompt:
+                return '''{"guides": [{"slug": "preview", "title": "Chapter Two Guide", "summary": "Chapter two summary.", "markdown": "# Chapter Two"}]}'''
+            return '''{"guides": [{"slug": "overview", "title": "Book Guide", "markdown": "# Book"}]}'''
+
+    translator = Translator()
+    guides = await GuideCompilerService.generate_top_down_guides(
+        Book(), [Chapter("1"), Chapter("2")], translator, mode="all"
+    )
+
+    assert len(translator.prompts) == 2
+    assert not any(guide.get("scope_id") == "1" for guide in guides)
+    assert any(guide.get("scope_id") == "2" for guide in guides)
+
+
+@pytest.mark.asyncio
 async def test_generate_top_down_guides_forces_expected_scope_metadata(tmp_path, monkeypatch):
     monkeypatch.setenv("STORAGE_DIR", str(tmp_path))
     translated_dir = tmp_path / "book-uuid" / "book_trans_md"
     translated_dir.mkdir(parents=True)
-    (translated_dir / "1_trans_zh.md").write_text("Chapter body.", encoding="utf-8")
+    (translated_dir / "1_trans_zh.md").write_text(
+        "Chapter body with enough complete mathematical context for a reliable preview.",
+        encoding="utf-8",
+    )
 
     class Book:
         uuid = "book-uuid"

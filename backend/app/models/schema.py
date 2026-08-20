@@ -5,7 +5,7 @@ import enum
 import uuid
 from .base import Base
 from pydantic import BaseModel, ConfigDict, Field
-from typing import Optional, Dict, List, Any
+from typing import Optional, Dict, List, Any, Literal
 
 class BookStatus(enum.Enum):
     loaded = "loaded"
@@ -211,6 +211,10 @@ class ImportBookRequest(BaseModel):
     preflight: bool = True
     outline_selection: Optional[List[str]] = None
     outline_plan: Optional[Dict[str, Any]] = None
+
+
+class GuideGenerationRequest(BaseModel):
+    mode: Literal["missing", "all"] = "missing"
 
 class LLMProfile(BaseModel):
     provider_id: Optional[str] = None

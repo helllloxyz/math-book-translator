@@ -11,6 +11,7 @@ from sqlalchemy.orm import selectinload
 
 from app.models.schema import Book, Chapter, QuizAttempt, QuizQuestion, UserNote
 from app.services.book_storage import BookStorage
+from app.services.chapter_source_service import ChapterSourceService
 from app.services.guide_service import GuideService
 from app.services.learning_profile_service import LearningProfileService
 from app.services.quiz_skill_registry import get_quiz_skill
@@ -135,6 +136,7 @@ class BookManagementService:
         guide_ready_count = 0
         guide_stale_count = 0
         guide_missing_count = 0
+        guide_skipped_count = 0
         for chapter in chapters:
             source = BookManagementService._file_info(
                 BookStorage.raw_chapter_path(book.uuid, chapter.chapter_index)
@@ -148,13 +150,29 @@ class BookManagementService:
                 translated_count += 1
             body_info = translation if translation["exists"] else source
             scoped_guides = chapter_guides.get(str(chapter.chapter_index), [])
-            guide_status = BookManagementService._guide_state(body_info, scoped_guides)
+            body_path = (
+                BookStorage.translated_chapter_path(book.uuid, chapter.chapter_index)
+                if translation["exists"]
+                else BookStorage.raw_chapter_path(book.uuid, chapter.chapter_index)
+            )
+            try:
+                body_text = body_path.read_text(encoding="utf-8") if body_info["exists"] else ""
+            except (OSError, UnicodeDecodeError):
+                body_text = ""
+            guide_eligible = ChapterSourceService.is_guide_body_eligible(body_text)
+            guide_status = (
+                "skipped"
+                if body_info["exists"] and not guide_eligible
+                else BookManagementService._guide_state(body_info, scoped_guides)
+            )
             if guide_status == "ready":
                 guide_ready_count += 1
             elif guide_status == "stale":
                 guide_stale_count += 1
-            else:
+            elif guide_status == "missing":
                 guide_missing_count += 1
+            else:
+                guide_skipped_count += 1
             translation_status = (
                 "ready" if translation["exists"] else "missing" if source["exists"] else "source_missing"
             )
@@ -176,6 +194,7 @@ class BookManagementService:
                         "status": guide_status,
                         "count": len(scoped_guides),
                         "titles": [str(item.get("title") or "") for item in scoped_guides],
+                        "skip_reason": "正文过短，无法生成可靠导读" if guide_status == "skipped" else None,
                     },
                     "quiz": BookManagementService._chapter_quiz_summary(
                         attempts_by_chapter.get(chapter.id, [])
@@ -281,6 +300,7 @@ class BookManagementService:
                 "chapter_guides_ready": guide_ready_count,
                 "chapter_guides_stale": guide_stale_count,
                 "chapter_guides_missing": guide_missing_count,
+                "chapter_guides_skipped": guide_skipped_count,
                 "book_guides": sum(item.get("scope_type") == "book" for item in guides),
                 "directory_guides": sum(item.get("scope_type") == "directory" for item in guides),
             },

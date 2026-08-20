@@ -75,7 +75,7 @@ async def test_generate_chapter_guide_writes_only_the_requested_chapter(tmp_path
     monkeypatch.setenv("STORAGE_DIR", str(tmp_path))
     translated = tmp_path / "book-uuid" / "book_trans_md" / "2_trans_zh.md"
     translated.parent.mkdir(parents=True)
-    translated.write_text("本章译文。", encoding="utf-8")
+    translated.write_text("本章完整介绍核心定义、关键关系、推导思路与阅读时需要留意的前置概念。", encoding="utf-8")
 
     class Book:
         uuid = "book-uuid"

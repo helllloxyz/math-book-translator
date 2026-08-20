@@ -1,3 +1,4 @@
+import re
 from typing import Any
 
 import aiofiles
@@ -7,6 +8,8 @@ from app.services.book_storage import BookStorage
 
 class ChapterSourceService:
     """Read complete chapter bodies for downstream LLM features."""
+
+    MIN_GUIDE_BODY_CHARS = 30
 
     @staticmethod
     async def _read_text(path) -> str:
@@ -36,3 +39,21 @@ class ChapterSourceService:
             "body_language": source["language"],
             "body": source["text"],
         }
+
+    @staticmethod
+    def guide_body_character_count(text: str) -> int:
+        """Count substantive chapter characters, excluding split headings and markup noise."""
+        body_lines = [
+            line
+            for line in str(text or "").splitlines()
+            if not re.match(r"^\s{0,3}#{1,6}(?:\s+|$)", line)
+        ]
+        plain_text = re.sub(r"[\s#*_>`\[\](){}-]+", "", "\n".join(body_lines))
+        return len(plain_text)
+
+    @staticmethod
+    def is_guide_body_eligible(text: str) -> bool:
+        return (
+            ChapterSourceService.guide_body_character_count(text)
+            >= ChapterSourceService.MIN_GUIDE_BODY_CHARS
+        )

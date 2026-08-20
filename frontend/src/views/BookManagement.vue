@@ -133,8 +133,8 @@
               </button>
               <button class="operation-regenerate" type="button" :disabled="snapshot.book.is_busy || Boolean(loadingAction)" @click="requestGuideRegeneration">
                 <span>
-                  <strong>重新生成全书导读</strong>
-                  <small>会覆盖现有 Guide，并产生较多模型调用</small>
+                  <strong>生成全书导读</strong>
+                  <small>默认只补缺失部分，也可选择全部重新生成</small>
                 </span>
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18 6-6-6-6" /></svg>
               </button>
@@ -199,7 +199,7 @@
                   <span :class="['compact-state', stateClass(chapter.guide.status)]">
                     {{ guideLabel(chapter.guide.status) }}
                   </span>
-                  <small>{{ chapter.guide.count ? `${chapter.guide.count} 份` : '尚未生成' }}</small>
+                  <small>{{ chapter.guide.status === 'skipped' ? chapter.guide.skip_reason : chapter.guide.count ? `${chapter.guide.count} 份` : '尚未生成' }}</small>
                 </td>
                 <td>
                   <strong class="quiz-attempt-count">{{ chapter.quiz.attempts }}</strong>
@@ -209,7 +209,7 @@
                   <router-link :to="chapterReaderRoute(chapter)" target="_blank" rel="noopener" title="在新标签页中打开本章" aria-label="在新标签页中打开本章">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V4H6.5A2.5 2.5 0 0 0 4 6.5z" /><path d="M4 6.5v13" /></svg>
                   </router-link>
-                  <button v-if="chapter.guide.status !== 'ready'" type="button" :title="chapter.guide.status === 'missing' ? '生成本章导读' : '重新生成本章导读'" :aria-label="chapter.guide.status === 'missing' ? '生成本章导读' : '重新生成本章导读'" :disabled="snapshot.book.is_busy || !chapter.source.exists || Boolean(loadingAction)" @click="generateChapterGuide(chapter)">
+                  <button v-if="['missing', 'stale'].includes(chapter.guide.status)" type="button" :title="chapter.guide.status === 'missing' ? '生成本章导读' : '重新生成本章导读'" :aria-label="chapter.guide.status === 'missing' ? '生成本章导读' : '重新生成本章导读'" :disabled="snapshot.book.is_busy || !chapter.source.exists || Boolean(loadingAction)" @click="generateChapterGuide(chapter)">
                     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3-1.1 4.1L7 8.2l3.9 1.1L12 13l1.1-3.7L17 8.2l-3.9-1.1zM5 15l-.7 2.3L2 18l2.3.7L5 21l.7-2.3L8 18l-2.3-.7zM19 14l-.9 3.1L15 18l3.1.9L19 22l.9-3.1L23 18l-3.1-.9z" /></svg>
                   </button>
                   <button type="button" title="重新翻译本章" aria-label="重新翻译本章" :disabled="snapshot.book.is_busy || !chapter.source.exists" @click="requestChapterRetranslation(chapter)">
@@ -245,11 +245,25 @@
         <h2 id="confirm-title">{{ confirmation.title }}</h2>
         <p>{{ confirmation.description }}</p>
         <div v-if="confirmation.kind === 'chapter'" class="confirm-note">新译文生成成功后才会替换当前译文。章节导读随后会标为“已过期”，直到你重新生成导读。</div>
-        <div v-else class="confirm-note confirm-cost-note">这是全书操作，会发起多次模型调用并消耗较多 Token。启动后请等待后台完成，避免重复提交。</div>
+        <template v-else>
+          <div class="guide-mode-options" role="radiogroup" aria-label="导读生成范围">
+            <label :class="{ selected: confirmation.mode === 'missing' }">
+              <input v-model="confirmation.mode" type="radio" value="missing" />
+              <span><strong>仅补全缺失部分</strong><small>推荐 · 保留所有已有导读，只生成尚不存在的章节、目录或全书导读</small></span>
+            </label>
+            <label :class="{ selected: confirmation.mode === 'all' }">
+              <input v-model="confirmation.mode" type="radio" value="all" />
+              <span><strong>全部重新生成</strong><small>按当前正文重建全部导读，并替换现有结果</small></span>
+            </label>
+          </div>
+          <div class="confirm-note" :class="{ 'confirm-cost-note': confirmation.mode === 'all' }">
+            {{ confirmation.mode === 'all' ? '全量生成会发起较多模型调用并消耗更多 Token。' : '过短、无法形成完整内容的篇章会自动跳过。' }}启动后请等待后台完成，避免重复提交。
+          </div>
+        </template>
         <footer>
           <button class="button button-secondary" type="button" @click="confirmation = null">取消</button>
           <button class="button button-primary" type="button" :disabled="Boolean(loadingAction)" @click="confirmRegeneration">
-            {{ loadingAction ? '正在启动' : confirmation.kind === 'guides' ? '确认重新生成全书导读' : '确认重新生成' }}
+            {{ loadingAction ? '正在启动' : confirmation.kind === 'guides' ? confirmation.mode === 'all' ? '确认全部重新生成' : '确认补全缺失导读' : '确认重新生成' }}
           </button>
         </footer>
       </section>
@@ -288,13 +302,13 @@ const guideNeedsWork = computed(() => Boolean(
   )
 ))
 const actionableChapterCount = computed(() => snapshot.value?.chapters.filter(chapter => (
-  chapter.translation.status !== 'ready' || chapter.guide.status !== 'ready'
+  chapter.translation.status !== 'ready' || ['missing', 'stale'].includes(chapter.guide.status)
 )).length || 0)
 const filteredChapters = computed(() => {
   const query = chapterQuery.value.toLocaleLowerCase()
   return (snapshot.value?.chapters || []).filter(chapter => {
     const matchesQuery = !query || `${chapter.chapter_index} ${chapter.title} ${chapter.title_en || ''}`.toLocaleLowerCase().includes(query)
-    const matchesFilter = chapterFilter.value !== 'attention' || chapter.translation.status !== 'ready' || chapter.guide.status !== 'ready'
+    const matchesFilter = chapterFilter.value !== 'attention' || chapter.translation.status !== 'ready' || ['missing', 'stale'].includes(chapter.guide.status)
     return matchesQuery && matchesFilter
   })
 })
@@ -319,9 +333,9 @@ const guidePipelineDescription = computed(() => {
   if (!snapshot.value) return ''
   const content = snapshot.value.content
   if (!content.chapter_guides_stale && !content.chapter_guides_missing) {
-    return `${content.chapter_guides_ready} 个章节导读均与当前正文同步。`
+    return `${content.chapter_guides_ready} 个章节导读均与当前正文同步${content.chapter_guides_skipped ? `，${content.chapter_guides_skipped} 个过短篇章已跳过` : ''}。`
   }
-  return `${content.chapter_guides_ready} 章可用，${content.chapter_guides_stale} 章已过期，${content.chapter_guides_missing} 章尚未生成。`
+  return `${content.chapter_guides_ready} 章可用，${content.chapter_guides_stale} 章已过期，${content.chapter_guides_missing} 章尚未生成${content.chapter_guides_skipped ? `，${content.chapter_guides_skipped} 章因正文过短跳过` : ''}。`
 })
 const showNotice = (message, type = 'success') => {
   if (noticeTimer) window.clearTimeout(noticeTimer)
@@ -383,8 +397,9 @@ const completeTranslations = async () => {
 const requestGuideRegeneration = () => {
   confirmation.value = {
     kind: 'guides',
-    title: '重新生成全书导读？',
-    description: '现有书籍导读、目录导读与章节导读都会按当前译文重新生成，并覆盖已有结果。'
+    mode: 'missing',
+    title: '生成全书导读',
+    description: '选择只补齐尚未生成的部分，或按当前正文重建全部书籍、目录与章节导读。'
   }
 }
 
@@ -420,9 +435,9 @@ const confirmRegeneration = async () => {
       markBackgroundWorkStarted('translating')
       showNotice(`已开始重新翻译 ${pending.chapter.chapter_index}，旧译文会保留至成功写入`)
     } else {
-      await bookStore.generateBookGuides(bookId.value)
+      await bookStore.generateBookGuides(bookId.value, pending.mode)
       markBackgroundWorkStarted('generating_guides')
-      showNotice('已开始重新生成导读，页面会自动更新')
+      showNotice(pending.mode === 'all' ? '已开始重新生成全部导读，页面会自动更新' : '已开始补全缺失导读，页面会自动更新')
     }
     confirmation.value = null
   } catch (err) {
@@ -442,8 +457,8 @@ const formatPercent = value => value === null || value === undefined ? '—' : `
 const formatCharacters = value => Number(value || 0).toLocaleString('zh-CN') + ' 字符'
 const formatDate = value => value ? new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' }).format(new Date(value)) : '未知日期'
 const translationLabel = status => ({ ready: '已翻译', missing: '缺失', source_missing: '原文缺失' }[status] || status)
-const guideLabel = status => ({ ready: '已同步', stale: '已过期', missing: '缺失' }[status] || status)
-const stateClass = status => status === 'ready' ? 'is-ready' : status === 'stale' || status === 'missing' ? 'is-attention' : 'is-error'
+const guideLabel = status => ({ ready: '已同步', stale: '已过期', missing: '缺失', skipped: '已跳过' }[status] || status)
+const stateClass = status => status === 'ready' ? 'is-ready' : status === 'stale' || status === 'missing' ? 'is-attention' : status === 'skipped' ? 'is-skipped' : 'is-error'
 
 watch(() => snapshot.value?.book.is_busy, syncPolling)
 watch([chapterQuery, chapterFilter], () => { chapterLimit.value = 24 })
@@ -627,6 +642,7 @@ onBeforeUnmount(() => {
 .is-ready { color: var(--color-success); background: var(--color-success-soft); }
 .state-attention,
 .is-attention { color: var(--color-warning); background: var(--color-warning-soft); }
+.is-skipped { color: var(--color-muted); background: var(--color-surface-muted); }
 .is-error { color: var(--color-danger); background: var(--color-danger-soft); }
 
 .operation-panel { padding: 1.7rem; border: 1px solid var(--color-line-strong); border-radius: 16px; background: rgba(255,253,248,.62); box-shadow: 0 18px 50px rgba(63,49,31,.06); }
@@ -693,6 +709,13 @@ onBeforeUnmount(() => {
 .confirm-dialog { width: min(100%, 500px); padding: 2rem; border: 1px solid rgba(255,255,255,.55); border-radius: 16px; background: var(--color-surface-raised); box-shadow: var(--shadow-lg); }
 .confirm-dialog h2 { margin: 0; font-family: var(--font-ui); font-size: 1.45rem; letter-spacing: -.03em; }
 .confirm-dialog > p:not(.eyebrow) { color: var(--color-muted); font-size: .8rem; line-height: 1.7; }
+.guide-mode-options { display: grid; gap: .65rem; margin: 1.1rem 0; }
+.guide-mode-options label { display: grid; grid-template-columns: auto 1fr; gap: .7rem; align-items: start; padding: .85rem; border: 1px solid var(--color-line); border-radius: 10px; cursor: pointer; }
+.guide-mode-options label.selected { border-color: var(--color-accent); background: var(--color-accent-soft); }
+.guide-mode-options input { margin-top: .18rem; accent-color: var(--color-accent-dark); }
+.guide-mode-options span { display: grid; gap: .22rem; }
+.guide-mode-options strong { font-size: .78rem; }
+.guide-mode-options small { color: var(--color-muted); font-size: .68rem; line-height: 1.5; }
 .confirm-note { padding: .8rem; border-left: 2px solid var(--color-warning); color: var(--color-muted); background: var(--color-warning-soft); font-size: .72rem; line-height: 1.6; }
 .confirm-cost-note { border-left-color: var(--color-danger); color: #7d3e30; background: var(--color-danger-soft); }
 .confirm-dialog footer { display: flex; justify-content: flex-end; gap: .5rem; margin-top: 1.5rem; }
